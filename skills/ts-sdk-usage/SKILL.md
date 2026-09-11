@@ -9,11 +9,15 @@ description: Use for any TypeScript/Node work with the SUQO TS SDK (@suqo/sdk) �
 be bundled into browser code. Node ≥18, zero runtime dependencies (`fetch`
 and `node:crypto` are both built in), strict TypeScript, dual ESM/CJS build.
 
-**Not yet published.** `npm view @suqo/sdk` 404s against the real npm
-registry today (`package.json` is `0.0.1`; `specs/versioning.md`'s `1.0.0`
-row is "Pending — this ticket's release," not shipped). Don't write
-`npm install @suqo/sdk` as a working command — see `references/client-setup.md`
-for what actually works right now (installing from a local build/tarball).
+**Published.** `@suqo/sdk` `1.0.0` is live on the public npm registry:
+`npm i @suqo/sdk`. Releases are automated end-to-end and publish via npm OIDC
+Trusted Publishing (no stored npm tokens), with a required human approval
+before anything goes live. Links: npm
+<https://www.npmjs.com/package/@suqo/sdk>, repo
+<https://github.com/suqo-ai/suqo-sdk-ts>, docs
+<https://suqo.ai/docs/sdk> (TypeScript:
+<https://suqo.ai/docs/sdk/typescript/>). See `references/client-setup.md` for
+install and client construction.
 
 ## Workflow
 

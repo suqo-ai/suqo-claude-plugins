@@ -164,7 +164,7 @@ purpose), and the dashboard's test-event quirk are in
 | Reference | Load when |
 | --- | --- |
 | `references/api-surface.md` | Writing any SDK call — exact signatures, exports, and what's deliberately not public. Load first. |
-| `references/client-setup.md` | Constructing the client, environment inference, the not-yet-published install story, framework wiring. |
+| `references/client-setup.md` | Constructing the client, installing from npm, environment inference, framework wiring. |
 | `references/products.md` | Listing products/plans, the pbpId chain into subscriptions. |
 | `references/subscriptions.md` | Create, cancel, billing-cycle, resume flows; the customer/client wire rename and its billing-prefix asymmetry. |
 | `references/customers.md` | The real (not stub) customers resource; the integer id exception. |

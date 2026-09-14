@@ -6,7 +6,7 @@ outside this file's exports is part of the public contract." If something is
 not here, it does not exist — say so rather than inventing it.
 
 Package `@suqo/sdk`, ESM + CJS, `strict` TypeScript, Node ≥18. Published on
-npm at `1.0.0` — see `client-setup.md` for install.
+npm — see `client-setup.md` for install.
 
 ## `SuqoClient`
 

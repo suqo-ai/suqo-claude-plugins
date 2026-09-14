@@ -9,7 +9,7 @@ description: Use for any TypeScript/Node work with the SUQO TS SDK (@suqo/sdk) â
 be bundled into browser code. Node â‰¥18, zero runtime dependencies (`fetch`
 and `node:crypto` are both built in), strict TypeScript, dual ESM/CJS build.
 
-**Published.** `@suqo/sdk` `1.0.0` is live on the public npm registry:
+**Published.** `@suqo/sdk` is live on the public npm registry:
 `npm i @suqo/sdk`. Releases are automated end-to-end and publish via npm OIDC
 Trusted Publishing (no stored npm tokens), with a required human approval
 before anything goes live. Links: npm

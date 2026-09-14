@@ -2,14 +2,15 @@
 
 ## Install
 
-`@suqo/sdk` `1.0.0` is on the public npm registry:
+`@suqo/sdk` is on the public npm registry:
 
 ```bash
 npm i @suqo/sdk
 ```
 
 Pin it the way the consuming project pins its other dependencies; the SDK
-follows semver, so `^1.0.0` is the normal choice.
+follows semver, so the caret range `npm i` writes by default is the normal
+choice. `npm view @suqo/sdk version` gives the current release.
 
 Releases are automated end-to-end and published through npm OIDC Trusted
 Publishing — there are no long-lived npm tokens — and every release still

@@ -1,15 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
-  "name": "suqo-claude-plugin-marketplace",
-  "version": "0.3.0",
-  "description": "Code Pros AI marketplace for SUQO Claude plugins and skills.",
+  "name": "suqo-claude-plugins-marketplace",
+  "version": "0.4.0",
+  "description": "SUQO AI marketplace for SUQO Claude plugins and skills.",
   "owner": {
-    "name": "Code Pros AI",
-    "url": "https://github.com/Code-Pros-AI"
+    "name": "SUQO AI",
+    "url": "https://github.com/suqo-ai"
   },
   "plugins": [
     {
-      "name": "suqo-claude-plugin",
+      "name": "suqo-claude-plugins",
       "description": "Skills and SDK usage guides for building apps on top of the SUQO PHP and TypeScript SDKs.",
       "source": "./",
       "category": "sdk"

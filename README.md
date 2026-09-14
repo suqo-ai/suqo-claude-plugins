@@ -1,4 +1,4 @@
-# suqo-claude-plugin
+# suqo-claude-plugins
 
 Claude Code plugin that ships skills for building apps on top of the **SUQO SDKs**.
 
@@ -7,8 +7,8 @@ Claude Code plugin that ships skills for building apps on top of the **SUQO SDKs
 This repo is a Claude Code plugin (and its own marketplace source), so it can be installed with:
 
 ```
-/plugin marketplace add Code-Pros-AI/suqo-claude-plugin
-/plugin install suqo-claude-plugin
+/plugin marketplace add suqo-ai/suqo-claude-plugins
+/plugin install suqo-claude-plugins
 ```
 
 Once installed, Claude loads the relevant skill on its own when a developer asks for SUQO work — no explicit invocation needed, though `/php-sdk-usage` and friends still work.
@@ -33,7 +33,7 @@ loads only the page a task needs.
 ## Structure
 
 ```
-suqo-claude-plugin/
+suqo-claude-plugins/
   .claude-plugin/
     plugin.json           # plugin metadata
     marketplace.json      # marketplace source definition

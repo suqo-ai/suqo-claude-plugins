@@ -30,15 +30,17 @@ already been caught out of date once, when its Codex command was updated to
 match a fix that was still an open, unmerged PR on `suqo-codex-plugins` at
 the time — running the shown command against that target's actual `main`
 at that moment would have broken with an "entry not found" error, because
-`main`'s script still took one fewer argument. Each target's own
-`.github/workflows/verify-sync.yml` is the canonical copy — before running
-any playbook command, diff *the whole command*, not just the literal values
-in it, against what that file (or the target script's own `--help`/usage
-text) actually says today. If they've diverged, use the target's real,
-current invocation, not this doc's, and say so in the PR/summary; that's the
-doc being stale, not an error to silently work around. More generally: if
-anything here conflicts with what a target repo's own `tools/`/CI actually
-does, its committed scripts win.
+`main`'s script still took one fewer argument. Before running a **convert or
+reconcile** command, diff it against the target's own
+`.github/workflows/verify-sync.yml`, which runs the same commands and is the
+canonical copy for those. **The install-verification commands have no such
+canonical copy for every target** — only Antigravity's CI actually runs an
+install step; Codex's and Cursor's `verify-sync.yml` only convert, reconcile,
+and diff, never install. For those two, the closest thing to canonical is
+each target's own `README.md` "Install" section, which does carry a real,
+previously-verified command — check that instead, and if even that looks
+stale, say so rather than guessing. If anything here conflicts with what a
+target repo's own `tools/`/CI/README actually does, those win.
 
 ## Step-by-step procedure (same shape for every target)
 
@@ -53,16 +55,22 @@ does, its committed scripts win.
    yourself; if the conversion tool errors or can't handle something, say so
    in the PR/summary rather than improvising a substitute. **`rm -rf` every
    intermediate directory (scratch, pruned, import) immediately before
-   writing to it, every run — never reuse one across runs.** Confirmed by
-   testing directly, for every conversion tool this doc uses: neither
-   `acplugin -o <dir>` nor `agy plugin import` clean their own output
-   directory on a second write — both merge into whatever's already there.
-   A file removed upstream between two runs then survives in a reused
-   directory forever, and since that survivor is what step 7 diffs and
-   step 8 commits, it ships to the target repo — silently defeating step
-   5's "full regeneration is self-correcting" promise. This applies to
-   every intermediate directory in the per-target playbook below, not just
-   the one this was first found on.
+   writing to it, every run — never reuse one across runs.** Neither
+   conversion tool cleans its own output directory on a second write, but
+   they fail differently — confirmed by testing both directly, not assumed
+   to be the same:
+   - `acplugin -o <dir>`: **merges** into whatever's already there. A file
+     removed upstream survives in a reused directory.
+   - `agy plugin import`: without `--force`, a second import over an
+     existing directory **doesn't even attempt to re-import at all** — it
+     silently skips ("already imported, use --force to re-import"). Worse
+     than a merge: the *entire* previous run's tree is what gets pruned and
+     committed, not just one stale leftover.
+   Either way, a reused directory's contents are what step 7 diffs and step
+   8 commits — this applies to every intermediate directory in the
+   per-target playbook below, not just the one this was first found on, and
+   silently defeats step 5's "full regeneration is self-correcting" promise
+   regardless of which of the two failure modes above actually happens.
 
 3. **Reconcile** the converted output using the target repo's own
    `tools/reconcile-*.mjs` (or equivalent) scripts — see the per-target
@@ -74,16 +82,26 @@ does, its committed scripts win.
    say so instead of re-implementing the fix yourself** — that script
    existing is itself part of what's being verified.
 
-4. **Place the converted output at the target repo's existing layout** —
-   do not change this convention; see the per-target playbook for the exact
-   paths. Every target's exact folder layout has already caused a real
+4. **Delete the target repo's existing output directories first, then place
+   the regenerated output at the target's existing layout** — do not change
+   this convention; see the per-target playbook for the exact paths and the
+   `git rm -r`/`rm -rf` this step requires for that target. This is the same
+   merge-vs-replace problem as step 2, one level further out: copying the
+   regenerated tree onto the target's working copy is still a copy, not a
+   sync, so a skill removed upstream would correctly be absent from the
+   regenerated output but still survive in the target's committed working
+   copy if its old directory is never deleted first — silently defeating
+   step 5's "full regeneration is self-correcting" promise a second way.
+   Every target's exact folder layout has also already caused a real
    install-breaking bug once (mismatched nesting, a broken marketplace path)
    — do not reintroduce a fixed one.
 
 5. **Regenerate the entire target output every time** — do not try to patch
-   only what changed. Full regeneration is simpler and self-correcting, and
-   makes the merged-PR trigger and the weekly drift-check trigger literally
-   the same procedure.
+   only what changed. This is only actually self-correcting if step 4's
+   delete-before-copy happens too — regeneration alone doesn't remove
+   anything the target's working copy already has that the fresh output
+   doesn't. Full regeneration also makes the merged-PR trigger and the
+   weekly drift-check trigger literally the same procedure.
 
 6. **Verify with a real install before opening anything.** Install the
    target's CLI if it isn't already available, then run the exact
@@ -127,6 +145,15 @@ does, its committed scripts win.
    - Anything you were unsure how to map — state it explicitly rather than
      guessing silently
 
+   **Once this PR (or a `.source-sync`-only bump from step 7) merges,
+   comment on and close any open drift issue on the target repo** (search
+   for the title `check-source-drift.yml` uses — see that workflow for the
+   exact string). The weekly drift check only opens/refreshes an issue when
+   it finds drift; it has no corresponding "drift resolved, close it" path
+   of its own, so a merge that fixes the drift doesn't make the issue go
+   away on its own — it would sit open, asserting a now-false claim, until
+   someone notices by hand.
+
 ## Guardrails (apply to every target, no exceptions)
 
 - Never hand-write a conversion mapping yourself — that's what step 2's tool
@@ -139,6 +166,10 @@ does, its committed scripts win.
   first, every time, for every scratch/pruned/import path in the per-target
   playbook. Confirmed by testing: none of this doc's conversion tools clean
   their own output directory on their own.
+- Never copy the regenerated output onto the target's existing tree without
+  deleting that tree first (step 4) — the same merge-vs-replace problem as
+  the point above, one level further out. Copying onto an existing directory
+  merges; it doesn't make the target match the regenerated output.
 - Do not add a `package.json` or any dependency file to a target repo — every
   target (and the plugin it ships) must stay zero-dependency. Use `npx`
   directly for `acplugin`; don't install it as a project dependency.
@@ -173,6 +204,13 @@ node tools/reconcile-marketplace-manifest.mjs \
 `.agents/plugins/marketplace.json` (nested under `plugins/<name>/` — Codex's
 install fails outright if this doesn't match `marketplace.json`'s
 `source.path`; this exact nesting was a real bug once, do not reintroduce it).
+**Before copying the regenerated output in, delete the target's existing
+`plugins/suqo-codex-plugins/` entirely** (`git rm -r` or `rm -rf`, then copy)
+— a skill removed upstream would be correctly absent from the fresh output
+but still survive in the target's working copy otherwise, since copying onto
+an existing directory merges rather than replaces it, same as step 2's
+intermediate directories. `.agents/plugins/marketplace.json` is a single
+file, not a directory — overwriting it directly is fine, no delete needed.
 
 **Install verification**:
 ```bash
@@ -209,6 +247,11 @@ string `"./"` and `metadata.pluginRoot` must be absent — acplugin's raw
 output gets both of these wrong (a real, pre-existing bug in its Cursor
 writer, not something introduced here), which breaks
 `agent plugin marketplace add` outright if not fixed by the reconcile script.
+**Before copying the regenerated output in, delete the target's existing
+`skills/` directory entirely** (`git rm -r` or `rm -rf`, then copy) — same
+merge-vs-replace reasoning as Codex above; a skill removed upstream needs
+its old directory actually gone, not merged over. `.cursor-plugin/*.json`
+are single files, safe to overwrite directly.
 
 **Install verification**:
 ```bash
@@ -250,14 +293,18 @@ node tools/rename-plugin-manifest.mjs \
 ```
 
 **Output layout**: flat at the repo root — `plugin.json`, `skills/<skill>/...`
-(same convention as Cursor). The importer's raw output also copies `.git/`,
-`.claude/`, `.claude-plugin/`, `LICENSE`, `README.md`, which are either
-Claude-specific or redundant with the target repo's own — **prune it into a
-separate, clean directory** before doing anything else with it. `rm -rf`
-`<pruned-dir>` first, same as the import directory above — `cp -r` merges
-into an existing directory rather than replacing it, so reusing
-`<pruned-dir>` across runs reintroduces the exact staleness bug the `rm -rf`
-on the import dir just closed, one step later (confirmed by reproducing it):
+(same convention as Cursor). **Before copying the pruned output into the
+target repo's working copy, delete its existing `skills/` directory
+entirely** — same merge-vs-replace reasoning as Codex/Cursor above.
+`plugin.json` is a single file, safe to overwrite directly. The importer's
+raw output also copies `.git/`, `.claude/`, `.claude-plugin/`, `LICENSE`,
+`README.md`, which are either Claude-specific or redundant with the target
+repo's own — **prune it into a separate, clean directory** before doing
+anything else with it. `rm -rf` `<pruned-dir>` first, same as the import
+directory above — `cp -r` merges into an existing directory rather than
+replacing it, so reusing `<pruned-dir>` across runs reintroduces the exact
+staleness bug the `rm -rf` on the import dir just closed, one step later
+(confirmed by reproducing it):
 
 ```bash
 rm -rf <pruned-dir>

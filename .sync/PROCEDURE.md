@@ -17,11 +17,21 @@ commands, which genuinely differ per tool and stay in each repo's own
 `tools/` scripts — closes that entire class of drift at the routine level.
 
 If you are a routine (or a human) executing this: you were given a **target**
-(one of the repos below) and a **plugin name** (the `--rename-to` value for
-that target, e.g. `suqo-codex-plugins`). Follow the steps below exactly for
-that target. If anything here conflicts with what a target repo's own
-`tools/`/CI actually does, its committed scripts win — treat that as a sign
-this doc is stale and say so in the PR/summary rather than guessing.
+(one of the repos below) and a **plugin name** (e.g. `suqo-codex-plugins`) —
+how that name gets applied is target-specific (a `--rename-to` flag on
+Codex/Cursor, a plain positional argument on Antigravity; see the per-target
+playbook, never assume one shape fits all). Follow the steps below exactly
+for that target.
+
+**The pinned versions and literal strings in the per-target playbook below
+(the `acplugin` version, description-override text, etc.) are a snapshot,
+not guaranteed current.** Each target's own `.github/workflows/verify-sync.yml`
+is the canonical copy of these values — before running the playbook's
+commands, diff them against what that file actually says today. If they've
+diverged, use the target's CI values, not this doc's, and say so in the
+PR/summary; that's the doc being stale, not an error to silently work around.
+More generally: if anything here conflicts with what a target repo's own
+`tools/`/CI actually does, its committed scripts win.
 
 ## Step-by-step procedure (same shape for every target)
 
@@ -37,14 +47,14 @@ this doc is stale and say so in the PR/summary rather than guessing.
    in the PR/summary rather than improvising a substitute.
 
 3. **Reconcile** the converted output using the target repo's own
-   `tools/reconcile-*.mjs` (or equivalent) scripts — again, see the
-   per-target playbook for the exact invocation, including `--rename-to
-   <plugin-name>` and any other required flags (some targets also need a
-   `--description` override — check the target's own script `--help`/doc
-   comment if unsure). **If a script the playbook expects is missing from
-   the target repo, stop and say so instead of re-implementing the fix
-   yourself** — that script existing is itself part of what's being
-   verified.
+   `tools/reconcile-*.mjs` (or equivalent) scripts — see the per-target
+   playbook for the exact invocation and flags for *this specific target*;
+   they are not interchangeable (Antigravity's script has no `--rename-to`
+   flag at all and hard-exits on any flag it doesn't recognize — passing it
+   one anyway breaks the run, it does not silently ignore it). **If a
+   script the playbook expects is missing from the target repo, stop and
+   say so instead of re-implementing the fix yourself** — that script
+   existing is itself part of what's being verified.
 
 4. **Place the converted output at the target repo's existing layout** —
    do not change this convention; see the per-target playbook for the exact
@@ -69,14 +79,30 @@ this doc is stale and say so in the PR/summary rather than guessing.
 
 7. **Diff** the regenerated tree against what's currently on the target
    repo's `main`.
-   - No difference → do nothing. Do not open an empty PR.
+   - No difference in the converted output, but `.source-sync` (see step 8)
+     is already up to date → do nothing. Do not open an empty PR.
+   - No difference in the converted output, but `.source-sync` is *behind*
+     the commit you generated from → the source moved without changing
+     anything this target actually consumes (e.g. an edit to an unrelated
+     file). Still commit a `.source-sync`-only bump and open a PR for it —
+     otherwise the weekly drift check keeps flagging this target as behind
+     forever, with no run of this procedure ever able to resolve it, since
+     "no converted-output difference" would otherwise mean "do nothing"
+     every single time.
+   - A real difference in the converted output → continue to step 8.
    - An open PR from a previous run of this same routine already exists for
      the same content → update the existing one instead of duplicating it.
 
-8. **If there's a real difference**, commit it on a new branch (a `claude/*`
-   prefix is fine) and open a **draft** PR against the target's `main` with:
+8. **Commit the result** on a new branch (a `claude/*` prefix is fine),
+   **including an updated `.source-sync` file** in the target repo's root —
+   set it to the exact commit SHA of `suqo-claude-plugins` you generated
+   from. This is not optional: every target's `verify-sync.yml` regenerates
+   from whatever SHA `.source-sync` records and diffs the result against
+   what's committed — skip this and CI fails on every single sync PR,
+   because it's comparing against a stale pin. Then open a **draft** PR
+   against the target's `main` with:
    - The exact source commit SHA of `suqo-claude-plugins` this was
-     generated from
+     generated from (same one now in `.source-sync`)
    - A short summary of what changed (which skill(s), which files, whether
      anything in the manifest needed reconciling)
    - Confirmation that the install-verification step (6) passed
@@ -88,6 +114,9 @@ this doc is stale and say so in the PR/summary rather than guessing.
 - Never hand-write a conversion mapping yourself — that's what step 2's tool
   is for.
 - Never skip step 6 (the install test) to save time.
+- Never commit without updating `.source-sync` (step 8) — a sync commit that
+  leaves it pointing at the old SHA fails that target's own CI, every time,
+  by construction.
 - Do not add a `package.json` or any dependency file to a target repo — every
   target (and the plugin it ships) must stay zero-dependency. Use `npx`
   directly for `acplugin`; don't install it as a project dependency.
@@ -161,17 +190,31 @@ writer, not something introduced here), which breaks
 ```bash
 agent --plugin-dir <target working copy>
 ```
-Confirm both skills (`php-sdk-usage`, `ts-sdk-usage`) are listed. (Cursor's
-CLI has no separate non-interactive "install this one plugin" command —
+Confirm **every skill present in the source's `skills/` directory** is
+listed — not a fixed list; if a skill is ever added or removed upstream,
+this check should reflect that too, not silently keep passing against
+whatever the list happened to be when this doc was written. (Cursor's CLI
+has no separate non-interactive "install this one plugin" command —
 `--plugin-dir` is the real, confirmed-working, non-interactive check.)
 
 ### `suqo-antigravity-plugins` (tool: Antigravity, importer: `agy` — no `acplugin`)
 
 `acplugin` does have a `--to antigravity` option, but its output has no
 `plugin.json` at all and fails `agy plugin validate` outright — confirmed by
-actually running it. Use the official first-party importer instead:
+actually running it. Use the official first-party importer instead.
+
+**The import directory does not get cleaned up on its own.**
+`~/.gemini/config/plugins/suqo-claude-plugins/` survives between separate
+runs of `agy plugin import`, and without `--force`, a second import over an
+existing directory doesn't even re-import at all — it silently skips
+("already imported, use --force to re-import"), confirmed by running it
+twice in a row. Delete it first, every time, so a file removed upstream
+can't survive as a stale leftover and so this step actually refreshes at
+all:
 
 ```bash
+rm -rf ~/.gemini/config/plugins/suqo-claude-plugins
+
 agy plugin import <path-to-suqo-claude-plugins>
 # imports to ~/.gemini/config/plugins/suqo-claude-plugins/
 
@@ -183,15 +226,28 @@ node tools/rename-plugin-manifest.mjs \
 ```
 
 **Output layout**: flat at the repo root — `plugin.json`, `skills/<skill>/...`
-(same convention as Cursor). Keep only `plugin.json` and `skills/` from the
-importer's raw output — it also copies `.git/`, `.claude/`,
-`.claude-plugin/`, `LICENSE`, `README.md`, which are either Claude-specific
-or redundant with the target repo's own.
+(same convention as Cursor). The importer's raw output also copies `.git/`,
+`.claude/`, `.claude-plugin/`, `LICENSE`, `README.md`, which are either
+Claude-specific or redundant with the target repo's own — **prune it into a
+separate, clean directory** before doing anything else with it:
 
-**Install verification**:
 ```bash
-agy plugin validate ~/.gemini/config/plugins/suqo-claude-plugins
-agy plugin install ~/.gemini/config/plugins/suqo-claude-plugins
+mkdir -p <pruned-dir>
+cp ~/.gemini/config/plugins/suqo-claude-plugins/plugin.json <pruned-dir>/
+cp -r ~/.gemini/config/plugins/suqo-claude-plugins/skills <pruned-dir>/
+```
+
+`<pruned-dir>` — not the raw import — is what gets diffed against the
+target repo and committed.
+
+**Install verification**: run this against `<pruned-dir>`, not the raw
+import. The raw import still has `.git/`/`.claude/`/etc. in it, which isn't
+what actually ships — verifying the raw tree instead of the pruned one
+means pruning could silently break something agy needs and this check
+would still pass:
+```bash
+agy plugin validate <pruned-dir>
+agy plugin install <pruned-dir>
 ```
 Confirm both succeed, then `agy plugin uninstall suqo-antigravity-plugins`.
 

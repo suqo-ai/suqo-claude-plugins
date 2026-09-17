@@ -137,6 +137,18 @@ target repo's own `tools/`/CI/README actually does, those win.
    what's committed — skip this and CI fails on every single sync PR,
    because it's comparing against a stale pin. Then open a **draft** PR
    against the target's `main` with:
+   - **The very first line of the PR body must be one of these two banners**
+     — a reviewer should be able to tell which kind of PR this is without
+     reading past line one:
+     - Real content change: `> 🔁 **Content update.** This regenerates
+       target content from a new source commit — see changed files below.`
+     - `.source-sync`-only bump (step 7's carve-out): `> 🔹 **Pointer-only
+       update, no plugin content changed.** The source moved, but nothing
+       this target's conversion consumes was touched — this PR only
+       advances \`.source-sync\`.`
+     Same rule for the PR **title**: prefix a pointer-only bump with `Bump
+     .source-sync` and say `(no content change)`, so it's distinguishable
+     from a real sync in a PR list too, not just in the body.
    - The exact source commit SHA of `suqo-claude-plugins` this was
      generated from (same one now in `.source-sync`)
    - A short summary of what changed (which skill(s), which files, whether

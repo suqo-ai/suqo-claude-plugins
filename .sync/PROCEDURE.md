@@ -23,15 +23,22 @@ Codex/Cursor, a plain positional argument on Antigravity; see the per-target
 playbook, never assume one shape fits all). Follow the steps below exactly
 for that target.
 
-**The pinned versions and literal strings in the per-target playbook below
-(the `acplugin` version, description-override text, etc.) are a snapshot,
-not guaranteed current.** Each target's own `.github/workflows/verify-sync.yml`
-is the canonical copy of these values — before running the playbook's
-commands, diff them against what that file actually says today. If they've
-diverged, use the target's CI values, not this doc's, and say so in the
-PR/summary; that's the doc being stale, not an error to silently work around.
-More generally: if anything here conflicts with what a target repo's own
-`tools/`/CI actually does, its committed scripts win.
+**Everything in the per-target playbook below — pinned versions, literal
+strings, and the argument count/order/flags of every command shown — is a
+snapshot, not guaranteed current.** This is not hypothetical: this doc has
+already been caught out of date once, when its Codex command was updated to
+match a fix that was still an open, unmerged PR on `suqo-codex-plugins` at
+the time — running the shown command against that target's actual `main`
+at that moment would have broken with an "entry not found" error, because
+`main`'s script still took one fewer argument. Each target's own
+`.github/workflows/verify-sync.yml` is the canonical copy — before running
+any playbook command, diff *the whole command*, not just the literal values
+in it, against what that file (or the target script's own `--help`/usage
+text) actually says today. If they've diverged, use the target's real,
+current invocation, not this doc's, and say so in the PR/summary; that's the
+doc being stale, not an error to silently work around. More generally: if
+anything here conflicts with what a target repo's own `tools/`/CI actually
+does, its committed scripts win.
 
 ## Step-by-step procedure (same shape for every target)
 

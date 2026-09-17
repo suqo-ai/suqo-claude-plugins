@@ -297,7 +297,7 @@ are single files, safe to overwrite directly.
 
 **Install verification**:
 ```bash
-agent --plugin-dir <target working copy>
+CURSOR_API_KEY=<key> agent -p --force --plugin-dir <target working copy> ...
 ```
 Confirm **every skill present in the source's `skills/` directory** is
 listed — not a fixed list; if a skill is ever added or removed upstream,
@@ -305,6 +305,17 @@ this check should reflect that too, not silently keep passing against
 whatever the list happened to be when this doc was written. (Cursor's CLI
 has no separate non-interactive "install this one plugin" command —
 `--plugin-dir` is the real, confirmed-working, non-interactive check.)
+
+**Auth note (per Cursor's own docs, not yet independently confirmed by
+running it — unlike the rest of this playbook)**: `agent` needs a
+`CURSOR_API_KEY` (from the account's Cursor Dashboard → API Keys) to run
+headlessly at all; without it, this step has nothing to authenticate with
+and can't run. `-p`/`--print` plus `--force` (or `--yolo`) put it in
+non-interactive apply-without-confirming mode — omitting either may leave
+it waiting on a prompt that never comes in a headless run. If
+`CURSOR_API_KEY` isn't set in this environment, don't skip the step
+silently — say so explicitly in the PR/issue, same as any other failed
+verification (step 6's guardrail).
 
 ### `suqo-antigravity-plugins` (tool: Antigravity, importer: `agy` — no `acplugin`)
 

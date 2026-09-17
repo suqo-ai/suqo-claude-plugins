@@ -44,7 +44,18 @@ More generally: if anything here conflicts with what a target repo's own
    [per-target playbook](#per-target-playbook) below for the exact,
    CI-proven command. Never hand-write a Claude→target content mapping
    yourself; if the conversion tool errors or can't handle something, say so
-   in the PR/summary rather than improvising a substitute.
+   in the PR/summary rather than improvising a substitute. **`rm -rf` every
+   intermediate directory (scratch, pruned, import) immediately before
+   writing to it, every run — never reuse one across runs.** Confirmed by
+   testing directly, for every conversion tool this doc uses: neither
+   `acplugin -o <dir>` nor `agy plugin import` clean their own output
+   directory on a second write — both merge into whatever's already there.
+   A file removed upstream between two runs then survives in a reused
+   directory forever, and since that survivor is what step 7 diffs and
+   step 8 commits, it ships to the target repo — silently defeating step
+   5's "full regeneration is self-correcting" promise. This applies to
+   every intermediate directory in the per-target playbook below, not just
+   the one this was first found on.
 
 3. **Reconcile** the converted output using the target repo's own
    `tools/reconcile-*.mjs` (or equivalent) scripts — see the per-target
@@ -117,6 +128,10 @@ More generally: if anything here conflicts with what a target repo's own
 - Never commit without updating `.source-sync` (step 8) — a sync commit that
   leaves it pointing at the old SHA fails that target's own CI, every time,
   by construction.
+- Never reuse an intermediate directory across runs (step 2) — `rm -rf` it
+  first, every time, for every scratch/pruned/import path in the per-target
+  playbook. Confirmed by testing: none of this doc's conversion tools clean
+  their own output directory on their own.
 - Do not add a `package.json` or any dependency file to a target repo — every
   target (and the plugin it ships) must stay zero-dependency. Use `npx`
   directly for `acplugin`; don't install it as a project dependency.
@@ -130,6 +145,7 @@ More generally: if anything here conflicts with what a target repo's own
 ### `suqo-codex-plugins` (tool: Codex, converter: `acplugin`)
 
 ```bash
+rm -rf <scratch-dir>
 npx --yes @disdjj/acplugin@1.7.0 convert <path-to-suqo-claude-plugins> \
   --all --to codex -o <scratch-dir>
 
@@ -163,6 +179,7 @@ Confirm the JSON output shows `"installed"` succeeding, then clean up:
 ### `suqo-cursor-plugins` (tool: Cursor, converter: `acplugin`)
 
 ```bash
+rm -rf <scratch-dir>
 npx --yes @disdjj/acplugin@1.7.0 convert <path-to-suqo-claude-plugins> \
   --all --to cursor -o <scratch-dir>
 
@@ -229,9 +246,14 @@ node tools/rename-plugin-manifest.mjs \
 (same convention as Cursor). The importer's raw output also copies `.git/`,
 `.claude/`, `.claude-plugin/`, `LICENSE`, `README.md`, which are either
 Claude-specific or redundant with the target repo's own — **prune it into a
-separate, clean directory** before doing anything else with it:
+separate, clean directory** before doing anything else with it. `rm -rf`
+`<pruned-dir>` first, same as the import directory above — `cp -r` merges
+into an existing directory rather than replacing it, so reusing
+`<pruned-dir>` across runs reintroduces the exact staleness bug the `rm -rf`
+on the import dir just closed, one step later (confirmed by reproducing it):
 
 ```bash
+rm -rf <pruned-dir>
 mkdir -p <pruned-dir>
 cp ~/.gemini/config/plugins/suqo-claude-plugins/plugin.json <pruned-dir>/
 cp -r ~/.gemini/config/plugins/suqo-claude-plugins/skills <pruned-dir>/

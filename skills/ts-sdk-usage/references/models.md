@@ -84,9 +84,8 @@ Wire-renamed as `client` at the top level only; `billing.*` fields get a
 
 ```ts
 interface Customer {
-  id: string;   // opaque prefixed id, e.g. "cus_1ce18d624" — a string, not an integer
+  id: number;   // integer, not UUID — see customers.md
   buyerPhone: string | null; buyerEmail: string | null; fullName: string | null;
-  address: string | null;
   createdAt: string;
 }
 ```

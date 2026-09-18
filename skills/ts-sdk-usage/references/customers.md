@@ -28,18 +28,29 @@ up to the implementation yet.
 
 ```ts
 interface Customer {
-  id: string;   // opaque prefixed id, e.g. "cus_1ce18d624" — not an integer
+  id: number;   // a plain integer — NOT a UUID, unlike every other id in the SDK
   buyerPhone: string | null;
   buyerEmail: string | null;
   fullName: string | null;
-  address: string | null;
   createdAt: string;
 }
 ```
 
-`retrieve(id)` takes that same opaque `cus_...`-prefixed string. Don't
-assume this `id` means anything outside this resource — it's not
-interchangeable with a `Customer.id` embedded anywhere else.
+`retrieve(id)` takes that same integer. Every other resource in this SDK
+identifies records with a UUID-shaped string (`subscriptionId`, `productId`,
+`pbpId`, ...); this is the one exception. Don't assume you can pass a UUID
+here, and don't assume this `id` means anything outside this resource.
+
+**A breaking change to this exact shape is already decided, just not
+released yet**: the SDK's own `CHANGELOG.md` `[Unreleased]` section (as of
+this writing) documents `Customer.id` moving from `number` to an opaque
+`"cus_..."`-prefixed `string`, and a new `Customer.address: string | null`
+field being added — both flagged there as requiring a `2.0.0`, not yet
+tagged/published. The currently-published `@suqo/sdk@1.0.0` (the only
+version on npm as of this writing) still has the shape above. Don't
+document the `2.0.0` shape as current fact until it's actually released —
+check `CHANGELOG.md`'s top-level version, not just `[Unreleased]`, before
+updating this section again.
 
 ## Not the same type as the `customer` on a `Subscription`
 

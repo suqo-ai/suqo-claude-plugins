@@ -3,7 +3,7 @@
 ```ts
 suqo.customers.list(params?: PageParams): Promise<Page<Customer>>      // GET /api/v1/customers/
 suqo.customers.autoPaging(params?: PageParams): AsyncIterableIterator<Customer>
-suqo.customers.retrieve(id: number): Promise<Customer>                  // GET /api/v1/customers/{id}/
+suqo.customers.retrieve(id: string): Promise<Customer>                  // GET /api/v1/customers/{id}/
 ```
 
 Read-only — no create/update/delete. A customer record is created implicitly
@@ -24,22 +24,22 @@ covers `autoPaging` separately; `docs/user/customers.md` and
 ground truth for this resource — the spec and addendum simply haven't caught
 up to the implementation yet.
 
-## The one id that isn't a UUID
+## `Customer`'s own shape
 
 ```ts
 interface Customer {
-  id: number;   // a plain integer — NOT a UUID, unlike every other id in the SDK
+  id: string;   // opaque prefixed id, e.g. "cus_1ce18d624" — not an integer
   buyerPhone: string | null;
   buyerEmail: string | null;
   fullName: string | null;
+  address: string | null;
   createdAt: string;
 }
 ```
 
-`retrieve(id)` takes that same integer. Every other resource in this SDK
-identifies records with a UUID-shaped string (`subscriptionId`, `productId`,
-`pbpId`, ...); this is the one exception. Don't assume you can pass a UUID
-here, and don't assume this `id` means anything outside this resource.
+`retrieve(id)` takes that same opaque `cus_...`-prefixed string. Don't
+assume this `id` means anything outside this resource — it's not
+interchangeable with a `Customer.id` embedded anywhere else.
 
 ## Not the same type as the `customer` on a `Subscription`
 

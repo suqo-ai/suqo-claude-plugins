@@ -1,0 +1,10 @@
+{
+  "ts-sdk-usage": {
+    "package": "@suqo/sdk",
+    "version": "1.0.0"
+  },
+  "php-sdk-usage": {
+    "package": "suqo/sdk-php",
+    "version": "1.0.0"
+  }
+}

@@ -3,7 +3,7 @@
 ```ts
 suqo.customers.list(params?: PageParams): Promise<Page<Customer>>      // GET /api/v1/customers/
 suqo.customers.autoPaging(params?: PageParams): AsyncIterableIterator<Customer>
-suqo.customers.retrieve(id: string): Promise<Customer>                  // GET /api/v1/customers/{id}/
+suqo.customers.retrieve(id: number): Promise<Customer>                  // GET /api/v1/customers/{id}/
 ```
 
 Read-only — no create/update/delete. A customer record is created implicitly

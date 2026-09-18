@@ -120,14 +120,26 @@ target repo's own `tools/`/CI/README actually does, those win.
    - No difference in the converted output, but `.source-sync` is *behind*
      the commit you generated from → the source moved without changing
      anything this target actually consumes (e.g. an edit to an unrelated
-     file). Still commit a `.source-sync`-only bump and open a PR for it —
-     otherwise the weekly drift check keeps flagging this target as behind
-     forever, with no run of this procedure ever able to resolve it, since
-     "no converted-output difference" would otherwise mean "do nothing"
-     every single time.
+     file). Still commit a `.source-sync`-only bump and **open a PR for it
+     per step 8, using the pointer-only banner and title described
+     there** — otherwise the weekly drift check keeps flagging this target
+     as behind forever, with no run of this procedure ever able to resolve
+     it, since "no converted-output difference" would otherwise mean "do
+     nothing" every single time. This carve-out is a real path a routine
+     actually takes, not a hypothetical — say so explicitly, it does not
+     exempt this PR from step 8's banner mandate just because it skipped
+     step 8's other bullets about install-verification and skill summaries.
    - A real difference in the converted output → continue to step 8.
    - An open PR from a previous run of this same routine already exists for
      the same content → update the existing one instead of duplicating it.
+     **Re-check which banner/title this update needs — don't assume the PR
+     still is what it was when first opened.** A PR that started as a
+     `.source-sync`-only bump (no plugin content changed) can turn into a
+     real content update on a later run if something upstream changed in
+     between, and vice versa is possible too. Rewrite the banner and title
+     to match what's actually true *now*, every time you update an existing
+     PR — a reviewer trusting a banner that was accurate when written but
+     is now stale is worse than no banner at all.
 
 8. **Commit the result** on a new branch (a `claude/*` prefix is fine),
    **including an updated `.source-sync` file** in the target repo's root —
@@ -139,16 +151,34 @@ target repo's own `tools/`/CI/README actually does, those win.
    against the target's `main` with:
    - **The very first line of the PR body must be one of these two banners**
      — a reviewer should be able to tell which kind of PR this is without
-     reading past line one:
-     - Real content change: `> 🔁 **Content update.** This regenerates
-       target content from a new source commit — see changed files below.`
-     - `.source-sync`-only bump (step 7's carve-out): `> 🔹 **Pointer-only
+     reading past line one. Copy these exactly, backticks included — each
+     one is delimited with **double** backticks specifically so the literal
+     single backtick around `.source-sync` inside it doesn't prematurely
+     end the span (confirmed by rendering both through GitHub's own
+     markdown API; a single-backtick version of this exact text renders
+     broken, with a stray backslash and garbled trailing text — do not
+     "simplify" this back to single backticks):
+     - Real content change: ``> 🔁 **Content update.** This regenerates
+       target content from a new source commit — see the changed files in
+       this PR.``
+     - `.source-sync`-only bump (step 7's carve-out): ``> 🔹 **Pointer-only
        update, no plugin content changed.** The source moved, but nothing
        this target's conversion consumes was touched — this PR only
-       advances \`.source-sync\`.`
-     Same rule for the PR **title**: prefix a pointer-only bump with `Bump
-     .source-sync` and say `(no content change)`, so it's distinguishable
-     from a real sync in a PR list too, not just in the body.
+       advances `.source-sync`.``
+   - **The PR title follows the same content-vs-pointer-only split as the
+     banner** — this is not currently checked by any target's CI (none of
+     the six workflows across all three targets reference the PR's title
+     or body — the only `pull_request` field any of them uses is
+     `.number`, in a concurrency group — so a missing/wrong banner or
+     title produces a green PR indistinguishable from a compliant one;
+     this is enforced by review, not by a machine, until/unless that
+     changes):
+     - Pointer-only bump: prefix with `Bump .source-sync` and say `(no
+       content change)`, e.g. `Bump .source-sync to
+       suqo-claude-plugins@21d9e38 (no content change)`.
+     - Real content change: `Sync <target> from
+       suqo-claude-plugins@<sha>`, e.g. `Sync suqo-codex-plugins from
+       suqo-claude-plugins@21d9e38`.
    - The exact source commit SHA of `suqo-claude-plugins` this was
      generated from (same one now in `.source-sync`)
    - A short summary of what changed (which skill(s), which files, whether

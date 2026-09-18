@@ -103,15 +103,16 @@ target repo's own `tools/`/CI/README actually does, those win.
    doesn't. Full regeneration also makes the merged-PR trigger and the
    weekly drift-check trigger literally the same procedure.
 
-6. **Verify with a real install before opening anything.** Install the
-   target's CLI if it isn't already available, then run the exact
-   verification command from the per-target playbook. **Never skip this
-   step to save time** — it has already caught real bugs that pure
-   content-diffing missed, on more than one target. If it fails, do not open
-   a PR — open an issue (or, if a PR must be opened to show the failure,
-   mark it draft and describe the exact error) so a human sees the break
-   immediately. Clean up the test install/marketplace registration
-   afterward either way.
+6. **Verify with a real install before opening anything** (except
+   Cursor — see its playbook section for why this step runs in CI
+   instead, after the PR opens, not before). Install the target's CLI if
+   it isn't already available, then run the exact verification command
+   from the per-target playbook. **Never skip this step to save time** —
+   it has already caught real bugs that pure content-diffing missed, on
+   more than one target. If it fails, do not open a PR — open an issue
+   (or, if a PR must be opened to show the failure, mark it draft and
+   describe the exact error) so a human sees the break immediately. Clean
+   up the test install/marketplace registration afterward either way.
 
 7. **Diff** the regenerated tree against what's currently on the target
    repo's `main`.
@@ -183,7 +184,9 @@ target repo's own `tools/`/CI/README actually does, those win.
      generated from (same one now in `.source-sync`)
    - A short summary of what changed (which skill(s), which files, whether
      anything in the manifest needed reconciling)
-   - Confirmation that the install-verification step (6) passed
+   - Confirmation that the install-verification step (6) passed (except
+     Cursor — see its playbook for what to write instead, since that
+     confirmation doesn't exist yet at PR-open time for this target)
    - Anything you were unsure how to map — state it explicitly rather than
      guessing silently
 
@@ -196,11 +199,12 @@ target repo's own `tools/`/CI/README actually does, those win.
    away on its own — it would sit open, asserting a now-false claim, until
    someone notices by hand.
 
-## Guardrails (apply to every target, no exceptions)
+## Guardrails (apply to every target, with one documented exception below)
 
 - Never hand-write a conversion mapping yourself — that's what step 2's tool
   is for.
-- Never skip step 6 (the install test) to save time.
+- Never skip step 6 (the install test) to save time (except Cursor — see
+  its playbook; that check runs in CI instead, not skipped, just moved).
 - Never commit without updating `.source-sync` (step 8) — a sync commit that
   leaves it pointing at the old SHA fails that target's own CI, every time,
   by construction.
@@ -299,8 +303,11 @@ are single files, safe to overwrite directly.
 the one exception to step 6's general instruction to run the verification
 command yourself. `suqo-cursor-plugins`' `verify-sync.yml` has an
 `install-verification` job that installs the real Cursor Agent CLI and
-runs it headlessly against exactly what's committed on the PR's branch.
-This exists specifically because the routine's own cloud sandbox could
+runs it headlessly against the PR's branch **plus a fresh random token
+the job injects into each skill's `references/` after checkout** — not
+"exactly what's committed," which would make this check trivially
+guessable; see the job's own comments for why. This exists specifically
+because the routine's own cloud sandbox could
 not reliably reach `cursor.com` to do this itself — confirmed by direct
 testing, not assumed: a `403` under the default network policy, then
 (after allowlisting `cursor.com` and `*.cursor.sh`) a connection
@@ -323,7 +330,13 @@ CI's `install-verification` job is what confirms this step; check its
 result on the PR before considering the sync fully verified, the same way
 you already rely on `verify-in-sync-with-source` for the convert/reconcile
 diff. If `install-verification` fails on a real PR, treat it exactly like
-any other failed CI check — don't merge, and say so. **This changes what
+any other failed CI check — don't merge, and say so. **A green
+`install-verification` doesn't always mean verified**: the job skips
+(reports a warning, not a failure) when `CURSOR_API_KEY` isn't available
+— expected on a fork PR, since GitHub withholds repo secrets from those
+runs — and a skipped step still shows green overall. Check whether the
+job actually ran, not just whether it passed; if it skipped, a maintainer
+needs to run the check by hand before merging that PR. This changes what
 step 8's "confirmation that the install-verification step (6) passed"
 means for this target specifically**: at the moment you open the PR, CI
 hasn't run yet, so you cannot honestly write "confirmed passed." Write

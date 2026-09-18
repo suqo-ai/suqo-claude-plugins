@@ -307,8 +307,13 @@ testing, not assumed: a `403` under the default network policy, then
 reset/`SSL_ERROR_SYSCALL` fetching the install script specifically, on
 separate attempts. A GitHub Actions runner has normal, unrestricted
 internet — no proxy, no TLS interception — so the real check happens
-there instead, the same way Antigravity's already did before this target
-ever needed the same fix.
+there instead. **Do not assume this is the same shape/risk as
+Antigravity's install-verification** — Antigravity's runs deterministic
+`agy` subcommands with no secret involved; Cursor's authenticates a real
+agent session with a secret (`CURSOR_API_KEY`) and lets it act on
+`--plugin-dir`-loaded skill content, which is a genuinely different,
+higher-risk shape. The job's own comments in `verify-sync.yml` explain
+why and are the canonical source for that reasoning, not this paragraph.
 
 **What this means when you (the routine) run this playbook**: open the PR
 (draft, same as always) once the convert/reconcile/diff steps pass — do
@@ -318,22 +323,26 @@ CI's `install-verification` job is what confirms this step; check its
 result on the PR before considering the sync fully verified, the same way
 you already rely on `verify-in-sync-with-source` for the convert/reconcile
 diff. If `install-verification` fails on a real PR, treat it exactly like
-any other failed CI check — don't merge, and say so.
+any other failed CI check — don't merge, and say so. **This changes what
+step 8's "confirmation that the install-verification step (6) passed"
+means for this target specifically**: at the moment you open the PR, CI
+hasn't run yet, so you cannot honestly write "confirmed passed." Write
+instead that CI's `install-verification` job will confirm this once it
+runs, and check back once it does — don't claim a result you don't have.
 
-**The actual command CI runs, for reference** (also useful if you ever
-need to reproduce this by hand from a network that isn't sandboxed):
-```bash
-CURSOR_API_KEY=<key> agent -p --force --plugin-dir <target working copy> \
-  --output-format text "List the exact directory name of every skill available to you..."
-```
-Confirm **every skill present in the source's `skills/` directory** is
-listed — not a fixed list; if a skill is ever added or removed upstream,
-this check should reflect that too. (Cursor's CLI has no separate
-non-interactive "install this one plugin" command — `--plugin-dir` is the
-real, confirmed-working check; combining it with `-p`/`--force` for
-headless CI use is new and not yet proven across many real runs the way
-the rest of this playbook is — watch its first several CI runs before
-fully trusting it.)
+**Do not copy the exact command/prompt/flags this job runs into this
+doc.** That's exactly the mistake this doc's own design principle (see
+the intro) exists to prevent, and it already happened once here: an
+earlier version of this section inlined `--force` and a since-abandoned
+"list every skill" prompt, both of which went stale the moment the real
+job in `verify-sync.yml` was hardened through several review rounds
+(landing on `--trust` instead of `--force`, and a per-run randomly
+generated token instead of any static, checkable fact) — and nobody
+updated this paragraph to match. **The job's own file, and its own
+extensive comments explaining each design choice, is the only place this
+detail belongs** — read `suqo-cursor-plugins/.github/workflows/verify-sync.yml`
+directly for the current, real command, flags, and reasoning; never trust
+a copy of it living here.
 
 ### `suqo-antigravity-plugins` (tool: Antigravity, importer: `agy` — no `acplugin`)
 

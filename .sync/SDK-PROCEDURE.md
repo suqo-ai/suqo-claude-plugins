@@ -75,12 +75,23 @@ changelog section that hasn't been given a release date/tag yet.
      order** (confirmed: nothing in Packagist's p2 spec promises this, it
      just happens to be true today). Parse every entry's `version` field
      (note: **v-prefixed**, e.g. `"v1.0.0"`, not the bare
-     `version_normalized`), discard anything that isn't a stable release,
-     and semver-compare all of them yourself — don't just take the first
-     array entry. Use the `dist.reference` commit SHA of whichever version
-     you land on, and pass the same `v`-prefixed string to `composer
-     require suqo/sdk-php:<version>` (that's the form Composer/Packagist
-     both expect).
+     `version_normalized`). **"Stable" means no pre-release suffix per
+     semver** (a hyphen segment — `1.1.0-beta.1`, `1.1.0-rc1`, etc. are not
+     stable; discard those). Sort what's left with an actual version-aware
+     comparison, never lexicographic string sort (`"1.9.0" > "1.10.0"`
+     lexicographically, which is wrong):
+     ```bash
+     curl -s https://repo.packagist.org/p2/suqo/sdk-php.json \
+       | grep -o '"version":"v[0-9][0-9.]*"' | grep -o 'v[0-9][0-9.]*' \
+       | sort -V | tail -1
+     ```
+     (`sort -V` is GNU coreutils' version-sort, exactly built for this —
+     confirmed it orders `1.9.0` before `1.10.0` correctly, unlike a plain
+     sort.) Pass that same `v`-prefixed string to `composer require
+     suqo/sdk-php:<version>` (the form Composer/Packagist both expect).
+     Also record its `dist.reference` commit SHA from the same JSON entry —
+     step 4 uses this to fetch `CHANGELOG.md` pinned to the exact released
+     commit, not a branch that may have moved since.
 
    If either matches its pinned version already, there is nothing to do for
    that SDK — stop here, do not open an empty PR.
@@ -108,14 +119,26 @@ changelog section that hasn't been given a release date/tag yet.
      to step 4 — this does not mean Tier 2 is unnecessary (see the
      Guardrails section on exactly what kinds of real changes a clean Tier
      1 diff can still miss).
+   - **If the old pinned version itself is no longer installable**
+     (unpublished from npm, or its tag/dist gone from Packagist — neither
+     registry guarantees old versions stay available forever) — there is no
+     baseline to diff against. Don't skip the check or improvise a
+     substitute baseline; say so explicitly in the PR/issue, same as any
+     other guardrail in this doc about not silently guessing.
 
-4. **Tier 2 — check whether prose needs updating.** First, **confirm this
-   SDK's `CHANGELOG.md` actually uses the same heading format you're about
-   to parse** — don't assume PHP's looks like TS's just because it's also
-   "Keep a Changelog"-flavored; check the last few version headers match
-   `## [X.Y.Z] - <date>` before relying on that boundary to extract entries.
-   If it doesn't, say so and figure out the real boundary rather than
-   silently mis-extracting entries.
+4. **Tier 2 — check whether prose needs updating.** Fetch `CHANGELOG.md`
+   pinned to the exact commit `dist.reference` named in step 2 (e.g.
+   `raw.githubusercontent.com/<org>/<repo>/<dist.reference>/CHANGELOG.md`),
+   not a branch — a branch can move between when a version was released and
+   when you're reading it, and this doc's whole point is not trusting
+   anything that isn't nailed to what was actually published.
+
+   First, **confirm this SDK's `CHANGELOG.md` actually uses the same
+   heading format you're about to parse** — don't assume PHP's looks like
+   TS's just because it's also "Keep a Changelog"-flavored; check the last
+   few version headers match `## [X.Y.Z] - <date>` before relying on that
+   boundary to extract entries. If it doesn't, say so and figure out the
+   real boundary rather than silently mis-extracting entries.
 
    Then pull every changelog entry between the old pinned version and the
    new one (the real, tagged version sections only — never the
@@ -128,11 +151,18 @@ changelog section that hasn't been given a release date/tag yet.
    `references/*.md`) as source material, not raw source code or your own
    invented explanation.
 
-5. **Open a draft PR** with the same two-banner convention `.sync/PROCEDURE.md`
-   already established (reuse it, don't reinvent it):
-   - Real prose/template changes: `> 🔁 **Content update.** ...`
-   - Checked, nothing relevant needed updating: `> 🔹 **Checked, no relevant
-     changes found.** ...`
+5. **Open a draft PR** with the very first line one of these two banners —
+   **use double backticks as the outer delimiter, exactly like
+   `.sync/PROCEDURE.md`'s own banners do**, and for the same reason: a
+   single-backtick span containing an embedded backticked term (a package
+   name, a version) renders broken on GitHub (confirmed there — don't
+   "simplify" this back to single backticks if you're tempted to):
+   - Real prose/template changes: ``> 🔁 **Content update.** Syncs
+     `skills/<name>` against `<package>@<new-version>` — see below for what
+     changed.``
+   - Checked, nothing relevant found: ``> 🔹 **Checked, no relevant
+     changes.** `<package>` moved from `<old-version>` to `<new-version>`,
+     but nothing in the changelog affects what this skill documents.``
    State plainly: which SDK, old version → new version, which changelog
    entries were reviewed, what Tier 1 found, and what (if anything) Tier 2
    changed. If Tier 1 failed and you couldn't determine the right prose fix,
@@ -170,20 +200,30 @@ cp <this-repo>/skills/ts-sdk-usage/templates/*.ts .
 # lets you skip perfectly matching every peer-dependency version: whatever
 # noise remains after installing the above is identical in both runs, so it
 # cancels out in the diff instead of needing to be eliminated up front.
-npm install @suqo/sdk@<old-pinned-version>
+# --legacy-peer-deps: this is a throwaway scratch project, not a real one -
+# a version bump that tightens @suqo/sdk's own peerDependencies could
+# otherwise abort the install with ERESOLVE instead of letting the
+# typecheck itself surface the real signal.
+npm install --legacy-peer-deps @suqo/sdk@<old-pinned-version>
 npx tsc --noEmit -p tsconfig.json > /tmp/baseline.txt 2>&1
 
-npm install @suqo/sdk@<new-published-version>
+npm install --legacy-peer-deps @suqo/sdk@<new-published-version>
 npx tsc --noEmit -p tsconfig.json > /tmp/new.txt 2>&1
 
 diff /tmp/baseline.txt /tmp/new.txt   # only lines unique to new.txt are real signal
 ```
 
 For a changelog entry that claims a **specific** type/method changed,
-supplement the diff above with a direct structural check — but know its
-real limitations, confirmed by testing both directly, not assumed:
+supplement the diff above with a direct structural check. **Add it as one
+more `.ts` file in the same scratch directory** (it needs the already-
+installed `@suqo/sdk` and the existing `tsconfig.json` — don't set up a
+separate project for it), run the same `npx tsc --noEmit -p tsconfig.json`
+against the *new* published version only (this check has no baseline
+concept — it either compiles or it doesn't) — but know its real
+limitations, confirmed by testing both directly, not assumed:
 
 ```ts
+// structural-check.ts, dropped into the same scratch-dir as the templates
 import type { Customer } from "@suqo/sdk";
 interface DocumentedCustomer { /* ...exactly what SKILL.md/references currently claim... */ }
 const _a: DocumentedCustomer = {} as Customer;
@@ -223,11 +263,19 @@ mkdir examples && cp <this-repo>/skills/php-sdk-usage/templates/*.php examples/
 # templates import real Symfony/PSR/Laravel classes this scratch project
 # never installs, and diffing against a same-noise baseline means you don't
 # have to perfectly replicate every framework dependency to get a real signal.
+#
+# --level=max, not a low number: confirmed against suqo-sdk-php's own
+# phpstan.neon.dist, which uses "level: max" for its own CI. Level 0 only
+# checks unknown classes/methods and wrong argument counts - it does NOT
+# check argument/return types at all (that starts around level 5), so a
+# genuine signature change (e.g. a parameter's type going from string to
+# int) would produce zero errors at level 0 in EITHER run, making the diff
+# report no drift when real drift occurred.
 composer require suqo/sdk-php:<old-pinned-version>
-vendor/bin/phpstan analyse examples --level=0 --no-progress > /tmp/baseline.txt 2>&1
+vendor/bin/phpstan analyse examples --level=max --no-progress > /tmp/baseline.txt 2>&1
 
 composer require suqo/sdk-php:<new-published-version>
-vendor/bin/phpstan analyse examples --level=0 --no-progress > /tmp/new.txt 2>&1
+vendor/bin/phpstan analyse examples --level=max --no-progress > /tmp/new.txt 2>&1
 
 diff /tmp/baseline.txt /tmp/new.txt   # only lines unique to new.txt are real signal
 ```
@@ -258,6 +306,13 @@ real class source directly** (`vendor/suqo/sdk-php/src/Model/<X>.php` or
   installed `.d.ts`/class source directly for those cases instead.
 - Never assume one SDK's `CHANGELOG.md` heading format without checking —
   confirm it before parsing, per step 4.
+- Never run `phpstan` below `level: max` for Tier 1 — confirmed against
+  `suqo-sdk-php`'s own CI config, which uses `max`; low levels don't check
+  argument/return types at all, so a genuine signature change produces
+  zero errors either way and the baseline-diff would report no drift.
+- If the old pinned version is no longer installable (unpublished, tag
+  gone), there is no baseline — say so explicitly, don't skip the check or
+  improvise a substitute.
 - Tier 2 output is always a draft PR. Never auto-merge prose changes — there
   is no mechanical proof they're correct, unlike Tier 1.
 - If a changelog entry's real-world impact is unclear, say so in the PR

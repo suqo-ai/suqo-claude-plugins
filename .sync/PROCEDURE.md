@@ -34,10 +34,10 @@ at that moment would have broken with an "entry not found" error, because
 reconcile** command, diff it against the target's own
 `.github/workflows/verify-sync.yml`, which runs the same commands and is the
 canonical copy for those. **The install-verification commands have no such
-canonical copy for every target** — only Antigravity's CI actually runs an
-install step; Codex's and Cursor's `verify-sync.yml` only convert, reconcile,
-and diff, never install. For those two, the closest thing to canonical is
-each target's own `README.md` "Install" section, which does carry a real,
+canonical copy for every target** — Antigravity's and Cursor's CI both run
+a real install step; Codex's `verify-sync.yml` only converts, reconciles,
+and diffs, never installs. For Codex, the closest thing to canonical is its
+own `README.md` "Install" section, which does carry a real,
 previously-verified command — check that instead, and if even that looks
 stale, say so rather than guessing. If anything here conflicts with what a
 target repo's own `tools/`/CI/README actually does, those win.
@@ -295,27 +295,45 @@ merge-vs-replace reasoning as Codex above; a skill removed upstream needs
 its old directory actually gone, not merged over. `.cursor-plugin/*.json`
 are single files, safe to overwrite directly.
 
-**Install verification**:
+**Install verification runs in CI, not in the routine's own session** —
+the one exception to step 6's general instruction to run the verification
+command yourself. `suqo-cursor-plugins`' `verify-sync.yml` has an
+`install-verification` job that installs the real Cursor Agent CLI and
+runs it headlessly against exactly what's committed on the PR's branch.
+This exists specifically because the routine's own cloud sandbox could
+not reliably reach `cursor.com` to do this itself — confirmed by direct
+testing, not assumed: a `403` under the default network policy, then
+(after allowlisting `cursor.com` and `*.cursor.sh`) a connection
+reset/`SSL_ERROR_SYSCALL` fetching the install script specifically, on
+separate attempts. A GitHub Actions runner has normal, unrestricted
+internet — no proxy, no TLS interception — so the real check happens
+there instead, the same way Antigravity's already did before this target
+ever needed the same fix.
+
+**What this means when you (the routine) run this playbook**: open the PR
+(draft, same as always) once the convert/reconcile/diff steps pass — do
+**not** attempt the local `agent --plugin-dir` check yourself first, and
+do not mark the PR draft-because-verification-is-pending on that basis.
+CI's `install-verification` job is what confirms this step; check its
+result on the PR before considering the sync fully verified, the same way
+you already rely on `verify-in-sync-with-source` for the convert/reconcile
+diff. If `install-verification` fails on a real PR, treat it exactly like
+any other failed CI check — don't merge, and say so.
+
+**The actual command CI runs, for reference** (also useful if you ever
+need to reproduce this by hand from a network that isn't sandboxed):
 ```bash
-CURSOR_API_KEY=<key> agent -p --force --plugin-dir <target working copy> ...
+CURSOR_API_KEY=<key> agent -p --force --plugin-dir <target working copy> \
+  --output-format text "List the exact directory name of every skill available to you..."
 ```
 Confirm **every skill present in the source's `skills/` directory** is
 listed — not a fixed list; if a skill is ever added or removed upstream,
-this check should reflect that too, not silently keep passing against
-whatever the list happened to be when this doc was written. (Cursor's CLI
-has no separate non-interactive "install this one plugin" command —
-`--plugin-dir` is the real, confirmed-working, non-interactive check.)
-
-**Auth note (per Cursor's own docs, not yet independently confirmed by
-running it — unlike the rest of this playbook)**: `agent` needs a
-`CURSOR_API_KEY` (from the account's Cursor Dashboard → API Keys) to run
-headlessly at all; without it, this step has nothing to authenticate with
-and can't run. `-p`/`--print` plus `--force` (or `--yolo`) put it in
-non-interactive apply-without-confirming mode — omitting either may leave
-it waiting on a prompt that never comes in a headless run. If
-`CURSOR_API_KEY` isn't set in this environment, don't skip the step
-silently — say so explicitly in the PR/issue, same as any other failed
-verification (step 6's guardrail).
+this check should reflect that too. (Cursor's CLI has no separate
+non-interactive "install this one plugin" command — `--plugin-dir` is the
+real, confirmed-working check; combining it with `-p`/`--force` for
+headless CI use is new and not yet proven across many real runs the way
+the rest of this playbook is — watch its first several CI runs before
+fully trusting it.)
 
 ### `suqo-antigravity-plugins` (tool: Antigravity, importer: `agy` — no `acplugin`)
 

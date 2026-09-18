@@ -83,7 +83,7 @@ one notch less confidence than `cancel`/`updateBillingCycle`.
 ```ts
 list(params?: PageParams): Promise<Page<Customer>>     // GET /api/v1/customers/
 autoPaging(params?: PageParams): AsyncIterableIterator<Customer>
-retrieve(id: string): Promise<Customer>                 // GET /api/v1/customers/{id}/ — opaque "cus_..." string, not a number
+retrieve(id: number): Promise<Customer>                 // GET /api/v1/customers/{id}/ — id is a NUMBER
 ```
 
 Read-only — no create/update/delete; a customer record is created implicitly

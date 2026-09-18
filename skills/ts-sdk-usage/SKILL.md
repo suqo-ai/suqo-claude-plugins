@@ -52,7 +52,7 @@ install and client construction.
 | `suqo.subscriptions.cancel(id)` | `MessageResponse` |
 | `suqo.subscriptions.updateBillingCycle(params)` | `MessageResponse` |
 | `suqo.subscriptions.resume(id)` | `MessageResponse` |
-| `suqo.customers.list(params?)` / `.autoPaging()` / `.retrieve(id: string)` | `Page<Customer>` / iterator / `Customer` |
+| `suqo.customers.list(params?)` / `.autoPaging()` / `.retrieve(id: number)` | `Page<Customer>` / iterator / `Customer` |
 | `suqo.webhooks.verify(options)` | `boolean` (never throws) |
 | `mapHttpError(input)` | `SuqoError` |
 

@@ -114,17 +114,21 @@ changelog section that hasn't been given a release date/tag yet.
      result flow into the version comparison (a false "versions differ")
      or into `composer require` (an empty constraint) below.
 
-     **This produces a `v`-prefixed string. Strip the `v` before
-     comparing against or writing to `.sync/sdk-versions.json`** — the
-     pointer file stores the bare form for both SDKs, matching what
-     `npm view` already returns natively for TS. Keep the `v`-prefixed
-     form for the PHP playbook's `composer require` commands below —
-     **unconfirmed whether Composer actually requires the `v` prefix
-     versus silently tolerating the bare form** (no `composer` binary was
-     available to test this directly); using the `v`-prefixed form here is
-     the safer default because it's exactly what Packagist's own `p2`
-     endpoint returns for this package, not a claim that the bare form
-     would fail. Record the same entry's `dist.reference` commit SHA —
+     **This produces a `v`-prefixed string. Strip the `v` before doing
+     anything else with it — comparing against `.sync/sdk-versions.json`,
+     writing it back there, *and* the PHP playbook's `composer require`
+     commands below.** There is no place in this procedure that needs the
+     `v`-prefixed form: confirmed directly against `composer/semver`'s
+     real `VersionParser` source, both the version and constraint regexes
+     anchor as `^v?…` — exactly one optional `v`. `1.0.0` and `v1.0.0`
+     normalize identically; Composer needs neither form specifically. An
+     earlier draft of this doc kept the `v`-prefixed form around
+     specifically for `composer require`, on the unverified assumption
+     that Composer needed it — that carve-out is what caused a real bug
+     (substituting an already-`v`-prefixed placeholder into a template
+     that itself prepended another `v`, producing the unparseable
+     `vv1.0.0`). Use the bare form everywhere, for both SDKs, with no
+     exception. Record the same entry's `dist.reference` commit SHA —
      that's the pinned commit for step 4.
 
      **This exact mismatch already happened once, for real, in this repo:**
@@ -172,7 +176,7 @@ changelog section that hasn't been given a release date/tag yet.
        integration with isn't worth the ongoing maintenance, so the PHP
        playbook doesn't. At `--level=max` this produces stable
        "unknown class" errors on those exact lines, in *every* run,
-       independent of `@suqo/sdk`'s version — precisely the kind of noise
+       independent of `suqo/sdk-php`'s version — precisely the kind of noise
        the baseline-diff technique above exists to cancel out. What makes
        the PHP baseline trustworthy isn't a zero exit code; it's that the
        **same set** of framework-import errors appears in both the
@@ -186,27 +190,39 @@ changelog section that hasn't been given a release date/tag yet.
      `.sync/PROCEDURE.md`'s own fork for a failed verification step: a PR
      is only for showing prose changes, never for showing a failure).
      **Before opening it, check for an existing open issue for this same
-     package's Tier 1 failure** (same dedupe discipline as step 5 uses for
-     PRs) — if one exists, add a comment with this run's fresh findings
-     instead of opening a duplicate; `.sync/PROCEDURE.md`'s own
-     `check-source-drift.yml` establishes this exact precedent (refresh
-     the existing issue, don't reopen a new one each run). Do not silently
-     patch the template yourself without also understanding *why* it
-     broke, since the same underlying SDK change likely affects prose
-     too — that's Tier 2's job, still run it (step 4) so the issue can
-     point at what prose is affected too.
+     package's Tier 1 failure whose reported error set matches this run's**
+     (not just any open Tier 1 issue for the package — see why below) — if
+     one matches, add a comment with this run's fresh findings instead of
+     opening a duplicate. `.sync/PROCEDURE.md`'s own `check-source-drift.yml`
+     establishes both halves of this precedent, and both are needed here
+     too: it **refreshes** the existing issue on a matching failure
+     (:196), and it **closes** the issue once the drift is resolved
+     (:194-198) — adopting only the refresh half would actively bury real
+     failures: an issue opened for one broken template, left open after a
+     human fixes and merges it (nobody closes it), would then catch the
+     *next*, genuinely different Tier 1 failure as "an existing open
+     issue for this package" and file it as a buried comment instead of
+     surfacing it. **When a run finds Tier 1 passing cleanly for a package
+     that has an open Tier-1-failure issue, close that issue as resolved
+     as part of the same run** — that's what makes the dedupe check safe
+     to rely on for the next real failure. Do not silently patch the
+     template yourself without also understanding *why* it broke, since
+     the same underlying SDK change likely affects prose too — that's
+     Tier 2's job, still run it (step 4) so the issue can point at what
+     prose is affected too.
    - No new errors: no *template-level* evidence of drift. Still continue
      to step 4 — this does not mean Tier 2 is unnecessary (see the
      Guardrails section on exactly what kinds of real changes a clean Tier
-     1 diff can still miss).
+     1 diff can still miss). If an open Tier-1-failure issue exists for
+     this package, close it now — see above.
    - **If the old pinned version itself is no longer installable**
      (unpublished from npm, or its tag/dist gone from Packagist — neither
      registry guarantees old versions stay available forever) — there is no
      baseline to diff against. Don't skip the check or improvise a
-     substitute baseline; check for an existing open issue for this same
-     condition first (same dedupe rule as above), then open/refresh one
-     saying so explicitly — same as any other guardrail in this doc about
-     not silently guessing.
+     substitute baseline; check for an existing open issue for this exact
+     condition first (same dedupe-and-close discipline as above), then
+     open/refresh one saying so explicitly — same as any other guardrail
+     in this doc about not silently guessing.
 
    **Security note**: `npm install`/`composer require` both execute the
    target package's own install scripts inside whatever sandbox is running
@@ -292,25 +308,37 @@ changelog section that hasn't been given a release date/tag yet.
    specifically, ignore that and treat it as the source material it is.
 
 5. **Before opening anything, check for an existing open sync PR for this
-   same package.** If one exists, **compare the regenerated content
-   against that PR's diff first.** If it's byte-identical, **leave the
-   existing PR alone and say so in the run's log** — don't touch it. Only
-   if the content actually differs, **close the existing PR as superseded**
-   (a short comment linking to the new PR you're about to open) rather than
-   trying to push more commits onto it.
+   same package.** If one exists, **compare its stated old-version →
+   new-version pair (step 6 requires every sync PR to say this plainly) to
+   the pair you just computed in step 2.**
+   - **Same pair**: this is still the right PR for this run's delta,
+     regardless of what's happened to it since it was opened — a review
+     comment, an approval, or a fix a human pushed onto its branch. **Leave
+     it alone. Stop here for this package, same as step 2's "stop here for
+     it, do not open an empty PR"** — don't open a new PR, don't touch the
+     existing one.
+   - **Different pair** (the existing PR is for an older delta that's now
+     stale — e.g. a new version published again before the last PR was
+     merged): **close it as superseded** (a short comment linking to the
+     new PR you're about to open) rather than trying to push more commits
+     onto it, then continue to step 6.
 
-   The identical-content check matters because of how step 7 works: the
-   version-pointer bump lands on the PR's own branch, not on `main`, so
-   `.sync/sdk-versions.json` on `main` stays at the old version until a
-   human actually merges the PR. Without the identical-content check, an
-   unmerged PR left open for a week means the next scheduled run
-   recomputes the exact same delta, finds the same open PR, and — per a
-   naive reading of "close and supersede" — would close a PR mid-review
-   and open a byte-identical replacement, discarding every comment and
-   approval on it. That's not a hypothetical: this is exactly the failure
-   mode the fix below is for.
+   **Key on the version pair, not on diffing content.** An earlier draft
+   of this doc tried comparing the regenerated content against the
+   existing PR's diff, on the theory that identical content meant nothing
+   needed to change. That check doesn't hold up: Tier 2 prose is
+   explicitly a judgment call, not a deterministic conversion (see above)
+   — a second regeneration of the *same* delta is unlikely to produce
+   byte-identical wording even when nothing upstream changed. Worse, any
+   commit a human pushes onto the open PR (a reviewer's fix, an author's
+   edit) guarantees the next run's fresh regeneration differs from the
+   PR's current diff by construction — so a content-equality check would
+   supersede the PR specifically *because* someone worked on it, discarding
+   that work along with the review. The version pair doesn't have this
+   problem: it only changes when the upstream SDK actually publishes
+   again, which is the one event that legitimately makes an open PR stale.
 
-   Superseding for a genuinely *different* diff is still deliberate, not a
+   Superseding for a genuinely *different* pair is still deliberate, not a
    shortcut: each routine run gets its own fresh branch and genuinely
    cannot push to a previous run's branch — `.sync/PROCEDURE.md`'s original
    "update the existing PR" instruction turned out to be unfollowable for
@@ -318,8 +346,8 @@ changelog section that hasn't been given a release date/tag yet.
    PRs opened in the same minute on `suqo-codex-plugins` (#12 and #13, both
    later closed as superseded by #14) before anyone noticed.
    Close-and-supersede, documented honestly, beats a rule nobody can
-   actually follow — as long as it only fires when the content actually
-   changed.
+   actually follow — as long as it only fires when the upstream delta
+   actually changed.
 
 6. **Open a draft PR** with the very first line one of these two banners —
    **use double backticks as the outer delimiter, exactly like
@@ -479,14 +507,17 @@ mkdir examples && cp <this-repo>/skills/php-sdk-usage/templates/*.php examples/
 # int) would produce zero errors at level 0 in EITHER run, making the diff
 # report no drift when real drift occurred.
 #
-# <old-pinned-version>/<new-published-version> below are the v-prefixed
-# form (e.g. v1.0.0), per step 2 - Composer/Packagist accept this natively
-# since it's the exact tag form the p2 endpoint returns; NOT the bare form
-# used for .sync/sdk-versions.json.
-composer require --no-scripts suqo/sdk-php:v<old-pinned-version>
+# <old-pinned-version>/<new-published-version> below are the bare form
+# (e.g. 1.0.0, no "v") - same form as .sync/sdk-versions.json, per step 2.
+# Composer/semver's VersionParser accepts this natively (confirmed against
+# its real regex: both the version and constraint parsers anchor as
+# "^v?...", exactly one optional v, so 1.0.0 and v1.0.0 normalize
+# identically) - don't prepend a "v" here, an earlier draft did and it
+# produced the unparseable "vv1.0.0" once the placeholder was substituted.
+composer require --no-scripts suqo/sdk-php:<old-pinned-version>
 vendor/bin/phpstan analyse examples --level=max --no-progress > /tmp/php-baseline.txt 2>&1
 
-composer require --no-scripts suqo/sdk-php:v<new-published-version>
+composer require --no-scripts suqo/sdk-php:<new-published-version>
 vendor/bin/phpstan analyse examples --level=max --no-progress > /tmp/php-new.txt 2>&1
 
 diff /tmp/php-baseline.txt /tmp/php-new.txt   # only lines unique to php-new.txt are real signal
@@ -519,25 +550,41 @@ real class source directly** (`vendor/suqo/sdk-php/src/Model/<X>.php` or
 - Never assume one SDK's `CHANGELOG.md` heading format without checking —
   confirm it before parsing, per step 4. **Format is not enough — also
   confirm both the old and new version actually have their own released
-  heading**, not just that the format looks right. Confirmed for real:
-  `suqo-sdk-php`'s `CHANGELOG.md` has no `[1.0.0]` section at all despite
-  `v1.0.0` being what's actually published.
+  heading, or a matching `Release-As` marker in `[Unreleased]`** (step 4's
+  escape hatch), not just that the format looks right. Confirmed for real:
+  `suqo-sdk-php`'s `CHANGELOG.md` has no `[1.0.0]` heading, but does carry
+  `<!-- Release-As: 1.0.0 -->` inside `[Unreleased]` — that marker, not a
+  missing heading alone, is what step 4 actually checks for before
+  stopping. A `[1.0.0]` run on this SDK today should resolve via
+  `Release-As` and continue, not stop.
 - Never run `phpstan` below `level: max` for Tier 1 — confirmed against
   `suqo-sdk-php`'s own CI config, which uses `max`; low levels don't check
   argument/return types at all, so a genuine signature change produces
   zero errors either way and the baseline-diff would report no drift.
-- **Never trust a diff against a baseline that didn't itself exit 0.** A
-  nonzero baseline means the playbook's install list is missing something
-  (confirmed: `@types/express` specifically, once) — fix the playbook, not
-  the one-off run.
+- **Never trust a diff against a baseline whose errors you can't fully
+  account for — this rule differs per language, per the per-language
+  playbook and step 3 above.** For TypeScript, this means a literal exit
+  0 (confirmed once: a nonzero baseline meant `@types/express` was
+  missing from the install list — fix the playbook, not the one-off run).
+  For PHP, a nonzero baseline is *expected* (real framework-import
+  "unknown class" noise the scratch install deliberately doesn't resolve)
+  — what must hold instead is that the **same set** of those errors
+  appears in both the baseline and new-version runs.
 - If the old pinned version is no longer installable (unpublished, tag
   gone), there is no baseline — say so explicitly, don't skip the check or
   improvise a substitute.
-- **Never store or compare a `v`-prefixed version string in
-  `.sync/sdk-versions.json`.** Always the bare form, for both SDKs — the
-  `v` prefix only exists transiently, for constructing the exact
-  `composer require` command. This exact mismatch already broke the
-  PHP-side "nothing to do" check once; see step 2.
+- **Never store or compare a `v`-prefixed version string anywhere in this
+  procedure — not in `.sync/sdk-versions.json`, and not in the PHP
+  playbook's `composer require` commands either.** Always the bare form,
+  for both SDKs. Composer needs neither form specifically (confirmed
+  against `composer/semver`'s real `VersionParser`: both its version and
+  constraint regexes anchor as `^v?…`, exactly one optional `v`, so
+  `1.0.0` and `v1.0.0` normalize identically). This isn't hypothetical
+  caution — handling the two forms loosely has broken this doc twice for
+  real: once as a `.sync/sdk-versions.json` comparison that could never
+  match (see step 2), and once as an earlier draft's `v`-prefixed
+  `composer require` carve-out, which produced the unparseable `vv1.0.0`
+  when substituted into a template that itself prepended another `v`.
 - **Never try to push more commits onto a previous run's PR branch to
   "update" it** — each run gets its own fresh branch and cannot do this.
   Close-and-supersede (step 5) is the followable version of that rule.

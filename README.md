@@ -13,6 +13,16 @@ This repo is a Claude Code plugin (and its own marketplace source), so it can be
 
 Once installed, Claude loads the relevant skill on its own when a developer asks for SUQO work — no explicit invocation needed, though `/php-sdk-usage` and friends still work.
 
+### Other agents via skills.sh
+
+```bash
+npx skills add suqo-ai/suqo-claude-plugins --skill '*'
+```
+
+Select your agent when prompted. Installation is project-local by default; add `-g` to install globally. Pass `--skill ts-sdk-usage` to install just one.
+
+See the [skills.sh docs](https://skills.sh) for manual installation and updates.
+
 ## Skills
 
 | Skill | Triggers on |

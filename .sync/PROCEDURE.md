@@ -187,8 +187,9 @@ target repo's own `tools/`/CI/README actually does, those win.
    - A short summary of what changed (which skill(s), which files, whether
      anything in the manifest needed reconciling)
    - Confirmation that the install-verification step (6) passed (except
-     Cursor — see its playbook for what to write instead, since that
-     confirmation doesn't exist yet at PR-open time for this target)
+     Cursor and Antigravity — see their playbooks for what to write
+     instead, since that confirmation doesn't exist yet at PR-open time
+     for either target)
    - Anything you were unsure how to map — state it explicitly rather than
      guessing silently
 
@@ -391,16 +392,31 @@ gh workflow run agy-import.yml \
   --repo suqo-ai/suqo-antigravity-plugins \
   -f source_sha=<exact-source-commit-sha>
 
-# workflow_dispatch returns no run id directly - poll for the run it
-# created (filter by workflow + recency, not just "the latest run", in
-# case something else dispatches concurrently) until it completes:
+# workflow_dispatch returns no run id directly, and gh run list's JSON has
+# no field exposing a dispatch's own inputs - "the latest run" is not
+# reliable if something else dispatches this same workflow concurrently
+# (already happened for real with this project's other routines). The
+# workflow's run-name embeds source_sha specifically so you can match on
+# it here instead - filter for the run whose displayTitle contains your
+# exact <exact-source-commit-sha>, not just the most recent row:
 gh run list --repo suqo-ai/suqo-antigravity-plugins \
   --workflow agy-import.yml --limit 5 \
-  --json databaseId,status,conclusion,createdAt
+  --json databaseId,status,conclusion,createdAt,displayTitle
 
 gh run download <run-id> --repo suqo-ai/suqo-antigravity-plugins \
   --name antigravity-import -D <pruned-dir>
 ```
+
+**This assumes your existing GitHub credentials can dispatch a workflow and
+download its artifact — unverified.** Every other write this routine does
+(committing, opening PRs) needs only Contents/Pull-requests write, which is
+already proven to work; `gh workflow run` and `gh run download` are a
+different permission surface (Actions read/write) that has never been
+exercised by this procedure before now. If either command fails with an
+auth/permission error, **stop and say so explicitly in an issue** — same as
+any other guardrail in this doc about not silently guessing or falling back
+to a workaround (in this case, don't fall back to running `agy` locally;
+that's the exact thing this carve-out exists to avoid).
 
 `acplugin` does have a `--to antigravity` option, but its output has no
 `plugin.json` at all and fails `agy plugin validate` outright — confirmed

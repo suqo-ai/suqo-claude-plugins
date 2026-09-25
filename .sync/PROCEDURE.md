@@ -104,8 +104,10 @@ target repo's own `tools/`/CI/README actually does, those win.
    weekly drift-check trigger literally the same procedure.
 
 6. **Verify with a real install before opening anything** (except
-   Cursor — see its playbook section for why this step runs in CI
-   instead, after the PR opens, not before). Install the target's CLI if
+   Cursor and Antigravity — see their playbook sections for why this step
+   runs in CI instead, after the PR opens, not before; Antigravity's
+   carve-out extends to conversion itself, not just verification). Install
+   the target's CLI if
    it isn't already available, then run the exact verification command
    from the per-target playbook. **Never skip this step to save time** —
    it has already caught real bugs that pure content-diffing missed, on
@@ -203,8 +205,12 @@ target repo's own `tools/`/CI/README actually does, those win.
 
 - Never hand-write a conversion mapping yourself — that's what step 2's tool
   is for.
-- Never skip step 6 (the install test) to save time (except Cursor — see
-  its playbook; that check runs in CI instead, not skipped, just moved).
+- Never skip step 6 (the install test) to save time (except Cursor and
+  Antigravity — see their playbooks; those checks run in CI instead, not
+  skipped, just moved).
+- For Antigravity specifically: never run `agy` in this routine's own
+  session — it can't reach the host it needs to install from. Trigger
+  `agy-import.yml` and download its artifact instead; see its playbook.
 - Never commit without updating `.source-sync` (step 8) — a sync commit that
   leaves it pointing at the old SHA fails that target's own CI, every time,
   by construction.
@@ -359,66 +365,69 @@ a copy of it living here.
 
 ### `suqo-antigravity-plugins` (tool: Antigravity, importer: `agy` — no `acplugin`)
 
-`acplugin` does have a `--to antigravity` option, but its output has no
-`plugin.json` at all and fails `agy plugin validate` outright — confirmed by
-actually running it. Use the official first-party importer instead.
+**Import and prune run in CI, not in this routine's own session — a
+stricter carve-out than Cursor's.** Cursor only defers install-verification
+to CI, because `acplugin` (its conversion tool) is an ordinary npm package
+with no network dependency of its own — the routine still does its own
+conversion locally. Antigravity has no such option: `agy` can only be
+installed from `antigravity.google` (which itself redirects to a private,
+per-project Cloud Run URL), and this routine's cloud sandbox rejects both
+hosts outright — confirmed by direct testing on two separate real runs,
+not assumed: a `403` from the sandbox's egress proxy every time, on both
+hosts. Without `agy`, **conversion itself can't run**, not just
+verification. GitHub Actions has no such restriction — confirmed directly
+by pulling a real run log of `suqo-antigravity-plugins`'s own
+`verify-sync.yml`, which installs and runs the same CLI successfully on
+every PR check, every time.
 
-**The import directory does not get cleaned up on its own.**
-`~/.gemini/config/plugins/suqo-claude-plugins/` survives between separate
-runs of `agy plugin import`, and without `--force`, a second import over an
-existing directory doesn't even re-import at all — it silently skips
-("already imported, use --force to re-import"), confirmed by running it
-twice in a row. Delete it first, every time, so a file removed upstream
-can't survive as a stale leftover and so this step actually refreshes at
-all:
+`.github/workflows/agy-import.yml` in `suqo-antigravity-plugins` does the
+import + rename + prune (the exact steps this section used to tell you to
+run locally) and uploads the result as a build artifact named
+`antigravity-import`. **Trigger it and download its output — do not run
+`agy` yourself:**
 
 ```bash
-rm -rf ~/.gemini/config/plugins/suqo-claude-plugins
+gh workflow run agy-import.yml \
+  --repo suqo-ai/suqo-antigravity-plugins \
+  -f source_sha=<exact-source-commit-sha>
 
-agy plugin import <path-to-suqo-claude-plugins>
-# imports to ~/.gemini/config/plugins/suqo-claude-plugins/
+# workflow_dispatch returns no run id directly - poll for the run it
+# created (filter by workflow + recency, not just "the latest run", in
+# case something else dispatches concurrently) until it completes:
+gh run list --repo suqo-ai/suqo-antigravity-plugins \
+  --workflow agy-import.yml --limit 5 \
+  --json databaseId,status,conclusion,createdAt
 
-node tools/rename-plugin-manifest.mjs \
-  ~/.gemini/config/plugins/suqo-claude-plugins/plugin.json \
-  suqo-antigravity-plugins \
-  --source <path-to-suqo-claude-plugins>/.claude-plugin/plugin.json \
-  --description "Skills and SDK usage guides for building apps on top of the SUQO PHP and TypeScript SDKs."
+gh run download <run-id> --repo suqo-ai/suqo-antigravity-plugins \
+  --name antigravity-import -D <pruned-dir>
 ```
+
+`acplugin` does have a `--to antigravity` option, but its output has no
+`plugin.json` at all and fails `agy plugin validate` outright — confirmed
+by actually running it. This is why the official importer is used instead
+(unchanged reasoning from before this carve-out existed).
 
 **Output layout**: flat at the repo root — `plugin.json`, `skills/<skill>/...`
-(same convention as Cursor). **Before copying the pruned output into the
-target repo's working copy, delete its existing `skills/` directory
+(same convention as Cursor). **Before copying `<pruned-dir>`'s contents into
+the target repo's working copy, delete its existing `skills/` directory
 entirely** — same merge-vs-replace reasoning as Codex/Cursor above.
-`plugin.json` is a single file, safe to overwrite directly. The importer's
-raw output also copies `.git/`, `.claude/`, `.claude-plugin/`, `LICENSE`,
-`README.md`, which are either Claude-specific or redundant with the target
-repo's own — **prune it into a separate, clean directory** before doing
-anything else with it. `rm -rf` `<pruned-dir>` first, same as the import
-directory above — `cp -r` merges into an existing directory rather than
-replacing it, so reusing `<pruned-dir>` across runs reintroduces the exact
-staleness bug the `rm -rf` on the import dir just closed, one step later
-(confirmed by reproducing it):
+`plugin.json` is a single file, safe to overwrite directly. `<pruned-dir>`
+downloaded from the workflow's artifact is already exactly what the old
+local `rm -rf`/import/rename/prune sequence used to produce — the importer's
+raw-output cruft (`.git/`, `.claude/`, `.claude-plugin/`, `LICENSE`,
+`README.md`) has already been stripped by the workflow before upload.
+`<pruned-dir>` is what gets diffed against the target repo and committed.
 
-```bash
-rm -rf <pruned-dir>
-mkdir -p <pruned-dir>
-cp ~/.gemini/config/plugins/suqo-claude-plugins/plugin.json <pruned-dir>/
-cp -r ~/.gemini/config/plugins/suqo-claude-plugins/skills <pruned-dir>/
-```
-
-`<pruned-dir>` — not the raw import — is what gets diffed against the
-target repo and committed.
-
-**Install verification**: run this against `<pruned-dir>`, not the raw
-import. The raw import still has `.git/`/`.claude/`/etc. in it, which isn't
-what actually ships — verifying the raw tree instead of the pruned one
-means pruning could silently break something agy needs and this check
-would still pass:
-```bash
-agy plugin validate <pruned-dir>
-agy plugin install <pruned-dir>
-```
-Confirm both succeed, then `agy plugin uninstall suqo-antigravity-plugins`.
+**Install verification**: also runs in CI, not this routine's own session,
+for the identical reason import does — `agy plugin validate`/`install` need
+the same blocked binary. `verify-sync.yml` already re-verifies the pruned
+output against whatever you commit, automatically, on every PR — check that
+job's result on the PR you open, the same way you already rely on Cursor's
+`install-verification` check rather than running it yourself. **A green
+`verify-in-sync-with-source` on your new PR is what confirms this step** —
+if it's still `pending` when you're about to state step 8's "confirmation
+that the install-verification step (6) passed," wait for it first rather
+than asserting a result you haven't seen.
 
 **Note**: `agy` has no supported way to pin a version — the installer's
 manifest URL is hardcoded, no version argument or env override. A future

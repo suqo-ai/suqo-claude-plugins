@@ -84,8 +84,8 @@ one notch less confidence than `cancel`/`updateBillingCycle`.
 list(params?: PageParams): Promise<Page<Customer>>          // GET /api/v1/customers/
 autoPaging(params?: PageParams): AsyncIterableIterator<Customer>
 retrieve(id: string): Promise<Customer>                      // GET /api/v1/customers/{id}/ — id is an opaque prefixed STRING, not a number
-create(params: CreateCustomerParams): Promise<Customer>      // POST /customers/
-update(id: string, params: UpdateCustomerParams): Promise<Customer> // PATCH /customers/{id}/
+create(params: CreateCustomerParams): Promise<Customer>      // POST /api/v1/customers/
+update(id: string, params: UpdateCustomerParams): Promise<Customer> // PATCH /api/v1/customers/{id}/
 ```
 
 No `delete`; a customer record is also created implicitly the first time

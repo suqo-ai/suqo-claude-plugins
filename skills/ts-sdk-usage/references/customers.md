@@ -4,8 +4,8 @@
 suqo.customers.list(params?: PageParams): Promise<Page<Customer>>          // GET /api/v1/customers/
 suqo.customers.autoPaging(params?: PageParams): AsyncIterableIterator<Customer>
 suqo.customers.retrieve(id: string): Promise<Customer>                     // GET /api/v1/customers/{id}/
-suqo.customers.create(params: CreateCustomerParams): Promise<Customer>     // POST /customers/
-suqo.customers.update(id: string, params: UpdateCustomerParams): Promise<Customer> // PATCH /customers/{id}/
+suqo.customers.create(params: CreateCustomerParams): Promise<Customer>     // POST /api/v1/customers/
+suqo.customers.update(id: string, params: UpdateCustomerParams): Promise<Customer> // PATCH /api/v1/customers/{id}/
 ```
 
 A customer record is also created implicitly the first time someone
@@ -85,8 +85,9 @@ construct by hand (e.g. test fixtures) — it's now a required property.
 
 Every field except `id`/`createdAt` can be `null` — a customer record
 doesn't guarantee it has a phone, email, or address on file. `retrieve("")`
-(and `"."`/`".."`, which URL parsing resolves the same way) throws
-`SuqoConfigError` rather than silently colliding with `list()`'s own URL.
+and `update("", ...)` (and `"."`/`".."`, which URL parsing resolves the same
+way) both throw `SuqoConfigError` rather than silently colliding with
+`list()`'s own URL — confirmed the same guard runs before either call.
 
 [#42]: https://github.com/suqo-ai/suqo-sdk-ts/issues/42
 

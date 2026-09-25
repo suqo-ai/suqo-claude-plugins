@@ -398,7 +398,13 @@ gh workflow run agy-import.yml \
 # (already happened for real with this project's other routines). The
 # workflow's run-name embeds source_sha specifically so you can match on
 # it here instead - filter for the run whose displayTitle contains your
-# exact <exact-source-commit-sha>, not just the most recent row:
+# exact <exact-source-commit-sha>, not just the most recent row. Two
+# *different* SHAs can never ambiguously match each other this way (both
+# are always the same 40-char length, so one can only "contain" the other
+# if identical) - but if you dispatched this same SHA more than once
+# yourself (e.g. retrying after a transient failure), more than one row
+# can match; take the one with the highest databaseId (the most recent
+# dispatch), not just the first match:
 gh run list --repo suqo-ai/suqo-antigravity-plugins \
   --workflow agy-import.yml --limit 5 \
   --json databaseId,status,conclusion,createdAt,displayTitle

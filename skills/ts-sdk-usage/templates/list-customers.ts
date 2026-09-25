@@ -5,10 +5,10 @@ import { getSuqoClient } from "./suqo-client.js";
  * created implicitly the first time a buyer completes checkout; see
  * references/customers.md for the separate create()/update() calls.
  *
- * Customer.id is an opaque prefixed string (e.g. "cus_1ce18d624"), the
- * same shape as every other id in the SDK (e.g. "pbp_..." on billing
- * periods) — see references/customers.md. This was a plain integer under
- * @suqo/sdk@1.0.0, a genuine exception at the time; 1.1.0 corrected it.
+ * Customer.id is an opaque prefixed string (e.g. "cus_1ce18d624"), like
+ * "pbp_..." on billing periods — not a UUID and not an integer. See
+ * references/customers.md. @suqo/sdk@1.0.0 typed it as `number`; that type
+ * was simply wrong (the API always sent this string), and 1.1.0 corrected it.
  */
 async function main(): Promise<void> {
   const suqo = getSuqoClient();

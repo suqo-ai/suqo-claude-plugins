@@ -1,12 +1,13 @@
 import { getSuqoClient } from "./suqo-client.js";
 
 /**
- * Lists customers, then retrieves one by id. Read-only — there's no
- * create/update/delete on this resource; a customer record is created
- * implicitly the first time a buyer completes checkout.
+ * Lists customers, then retrieves one by id. A customer record is also
+ * created implicitly the first time a buyer completes checkout; see
+ * references/customers.md for the separate create()/update() calls.
  *
- * Unlike every other resource in the SDK, Customer.id is a plain integer,
- * not a UUID — see references/customers.md.
+ * Unlike every other resource in the SDK, Customer.id is an opaque
+ * prefixed string (e.g. "cus_1ce18d624"), not a UUID — see
+ * references/customers.md.
  */
 async function main(): Promise<void> {
   const suqo = getSuqoClient();
@@ -20,7 +21,7 @@ async function main(): Promise<void> {
 
   const first = page.results[0];
   if (first) {
-    // retrieve() takes the same integer id — fetch this one again to show the single-record shape.
+    // retrieve() takes the same opaque string id — fetch this one again to show the single-record shape.
     const fetched = await suqo.customers.retrieve(first.id);
     console.log(`\nRetrieved #${fetched.id} directly:`, fetched);
   } else {

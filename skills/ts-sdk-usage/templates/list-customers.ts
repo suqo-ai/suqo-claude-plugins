@@ -5,9 +5,10 @@ import { getSuqoClient } from "./suqo-client.js";
  * created implicitly the first time a buyer completes checkout; see
  * references/customers.md for the separate create()/update() calls.
  *
- * Unlike every other resource in the SDK, Customer.id is an opaque
- * prefixed string (e.g. "cus_1ce18d624"), not a UUID — see
- * references/customers.md.
+ * Customer.id is an opaque prefixed string (e.g. "cus_1ce18d624"), the
+ * same shape as every other id in the SDK (e.g. "pbp_..." on billing
+ * periods) — see references/customers.md. This was a plain integer under
+ * @suqo/sdk@1.0.0, a genuine exception at the time; 1.1.0 corrected it.
  */
 async function main(): Promise<void> {
   const suqo = getSuqoClient();

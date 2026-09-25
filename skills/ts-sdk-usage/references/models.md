@@ -38,10 +38,16 @@ interface Product {
 ```
 
 `productImage` was corrected from `string[]` to `ProductImage[]` in
-`@suqo/sdk@1.1.0` — the API sends image objects (`{ image, image_order }`),
-not bare URLs; the SDK was already passing them through untouched at
-runtime, just under a `string[]` type. Upgrading from `1.0.0`: replace
-`product.productImage[i]` used as a URL with `product.productImage[i].image`.
+`@suqo/sdk@1.1.0`. Two changes, not one: under `1.0.0` the SDK passed the
+wire's `product_image` array through **verbatim** — `1.0.0`'s runtime shape
+was actually `{ image, image_order }` under a lying `string[]` type — and
+`1.1.0` both types it correctly *and* maps each element, renaming
+`image_order` to `imageOrder` (confirmed directly against both published
+builds: `1.0.0`'s output never touches `image_order`; `1.1.0`'s reads it
+specifically to rename it). Upgrading from `1.0.0`: replace
+`product.productImage[i]` used as a URL with `product.productImage[i].image`,
+**and** replace any `(img as any).image_order` access with
+`img.imageOrder` — the runtime key changed, this isn't just a type fix.
 
 `price`, `vatPercentage`, `totalSubscribers` — strings, never coerced.
 

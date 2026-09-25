@@ -59,7 +59,9 @@ const updated = await suqo.customers.update("cus_1ce18d624", { fullName: "Ram Ba
 Send only the fields you're changing — anything left out stays as it is.
 Pass `""` to clear a field. `phone` can't be changed, so it isn't an option
 here. A validation problem (a bad phone or email) throws `ValidationError`
-with `fieldErrors` — see `errors.md`.
+with `fieldErrors` — see `errors.md`. Like every write in this SDK, `update()`
+never auto-retries — a `NetworkError` means it may or may not have landed;
+reconcile with `retrieve()`/`list()`, don't resend blindly.
 
 ## `Customer`'s own shape
 

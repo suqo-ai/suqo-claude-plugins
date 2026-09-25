@@ -59,8 +59,11 @@ interface Product {
 
 `productImage` was corrected from `string[]` to `ProductImage[]` in
 `@suqo/sdk@1.1.0` — the wire has always sent image objects
-(`{ image, image_order }`), never bare URLs; upgrading from `1.0.0`, replace
-`product.productImage[i]` used as a URL with `product.productImage[i].image`.
+(`{ image, image_order }`), never bare URLs. Upgrading from `1.0.0`, replace
+`product.productImage[i]` used as a URL with `product.productImage[i].image`,
+**and** replace any `image_order` access with `imageOrder` — `1.1.0` renames
+the key on the way in, it's not just a type correction (confirmed against
+both published builds).
 
 Every property here is the plain camelCase of the wire's snake_case field —
 no renames anywhere in this resource (`product_id` → `productId`,

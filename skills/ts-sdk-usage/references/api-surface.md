@@ -93,7 +93,9 @@ someone subscribes. `id` moved from `number` to an opaque `"cus_..."`-prefixed
 `string` in `@suqo/sdk@1.1.0` — see `customers.md` for the upgrade note. This
 is a real, working, tested resource (`test/contract/requestShape.test.ts`
 covers `list`/`retrieve` against a mock server; `test/resources/customers.test.ts`
-covers `autoPaging` separately).
+covers `autoPaging` separately). `list`/`retrieve`/`autoPaging` retry on
+`NetworkError`/429/5xx same as every read; `create`/`update` never retry,
+same as every other write in this SDK.
 
 **`specs/SDK-SPEC.md` §11 and `docs/typescript-addendum.md` §6
 in the SDK repo both still describe this resource as an unimplemented stub

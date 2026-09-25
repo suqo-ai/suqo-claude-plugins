@@ -114,5 +114,10 @@ different type from `SubscriptionCustomer` — the object embedded under
 `subscriptions.md`, `models.md`). The SDK never conflates them, and neither
 should generated code: don't assume a `Customer.id` shows up anywhere on a
 `Subscription`, and don't assume `SubscriptionCustomer`'s fields (`phone`,
-`fullName`, `billing`, `shipping`, ...) exist on `Customer` — they don't
-overlap beyond `fullName`.
+`fullName`, `email`, `address`, `billing`, `shipping`, ...) exist on
+`Customer` — they share only field *names*, not meaning, and only for
+`fullName` and, as of `@suqo/sdk@1.1.0`, `address` too (confirmed directly
+against the published `.d.ts`: `SubscriptionCustomer` has its own top-level
+`address?: string`, distinct from this resource's `Customer.address`, and
+also distinct from the nested `billing.address`/`shipping.address` under
+it). Reading one's `address` tells you nothing about the other's.

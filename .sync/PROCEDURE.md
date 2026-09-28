@@ -71,6 +71,13 @@ target repo's own `tools/`/CI/README actually does, those win.
    per-target playbook below, not just the one this was first found on, and
    silently defeats step 5's "full regeneration is self-correcting" promise
    regardless of which of the two failure modes above actually happens.
+   **This bullet's `agy plugin import` behavior no longer applies to
+   Antigravity specifically** — see its playbook section: import now runs
+   entirely inside CI (`agy-import.yml`), not in this routine's own
+   session, so you never invoke `agy plugin import` yourself for this
+   target anymore. Everything above still applies to Codex/Cursor's
+   `acplugin`, and to `agy-import.yml`'s own internals (which run the same
+   `rm -rf`-first sequence, just inside CI instead of here).
 
 3. **Reconcile** the converted output using the target repo's own
    `tools/reconcile-*.mjs` (or equivalent) scripts — see the per-target
@@ -80,7 +87,15 @@ target repo's own `tools/`/CI/README actually does, those win.
    one anyway breaks the run, it does not silently ignore it). **If a
    script the playbook expects is missing from the target repo, stop and
    say so instead of re-implementing the fix yourself** — that script
-   existing is itself part of what's being verified.
+   existing is itself part of what's being verified. **This step is a
+   no-op for Antigravity specifically — do not stop here for this target.**
+   Its playbook's `agy-import.yml` runs `rename-plugin-manifest.mjs`
+   internally, in CI, as part of the same run step 2 already pointed you
+   at; by the time you have `<pruned-dir>` downloaded, reconciliation has
+   already happened. Looking for a local reconcile invocation to run
+   yourself here, finding none, and halting on this step's own "stop and
+   say so" instruction would be exactly backwards — that instruction is
+   for a *missing* script, not a script whose job moved to CI.
 
 4. **Delete the target repo's existing output directories first, then place
    the regenerated output at the target's existing layout** — do not change
@@ -398,20 +413,57 @@ gh workflow run agy-import.yml \
 # (already happened for real with this project's other routines). The
 # workflow's run-name embeds source_sha specifically so you can match on
 # it here instead - filter for the run whose displayTitle contains your
-# exact <exact-source-commit-sha>, not just the most recent row. Two
-# *different* SHAs can never ambiguously match each other this way (both
-# are always the same 40-char length, so one can only "contain" the other
-# if identical) - but if you dispatched this same SHA more than once
-# yourself (e.g. retrying after a transient failure), more than one row
-# can match; take the one with the highest databaseId (the most recent
-# dispatch), not just the first match:
-gh run list --repo suqo-ai/suqo-antigravity-plugins \
-  --workflow agy-import.yml --limit 5 \
-  --json databaseId,status,conclusion,createdAt,displayTitle
+# exact <exact-source-commit-sha>. Two *different* SHAs can never
+# ambiguously match each other this way (both are always the same
+# 40-char length, so one can only "contain" the other if identical).
+#
+# The run takes a minute or more (installer + setup-node + import +
+# validate) - poll, don't list once immediately. Listing right after
+# dispatch can either find nothing yet, or find the run still
+# `in_progress`, and `gh run download` on an unfinished run fails with
+# "no valid artifacts found." Poll until a matching run reaches
+# `status == completed`:
+match=""
+while [ -z "$match" ] || [ "$match" = "null" ]; do
+  sleep 15
+  match=$(gh run list --repo suqo-ai/suqo-antigravity-plugins \
+    --workflow agy-import.yml --limit 10 \
+    --json databaseId,status,conclusion,displayTitle \
+    --jq '[.[] | select(.displayTitle | contains("<exact-source-commit-sha>")) | select(.status == "completed")] | sort_by(.databaseId) | last')
+done
 
-gh run download <run-id> --repo suqo-ai/suqo-antigravity-plugins \
+conclusion=$(echo "$match" | jq -r '.conclusion')
+run_id=$(echo "$match" | jq -r '.databaseId')
+
+# If you dispatched this same SHA more than once yourself (e.g. retrying
+# after a transient failure), more than one row can match "completed" -
+# taking the highest databaseId picks the most recent dispatch's own
+# outcome, which is what you actually want to trust (not necessarily
+# "whichever one happened to succeed" - if the most recent attempt
+# failed, that's the real, current state; don't go hunting for an older
+# run that succeeded instead).
+if [ "$conclusion" != "success" ]; then
+  echo "agy-import.yml run $run_id for <exact-source-commit-sha> completed with conclusion '$conclusion', not success. Stop and say so in an issue - same as any other failed verification step in this doc - rather than retrying silently or falling back to running agy locally."
+  exit 1
+fi
+
+rm -rf <pruned-dir>
+gh run download "$run_id" --repo suqo-ai/suqo-antigravity-plugins \
   --name antigravity-import -D <pruned-dir>
 ```
+
+**The workflow filename, its `source_sha` input, and its `antigravity-import`
+artifact name above are a snapshot, not the canonical source — same
+principle as the Cursor carve-out above, and for the same reason: an
+earlier version of that section inlined `--force` and a since-abandoned
+prompt, and nobody updated it when the real job changed.** If a rename or
+flag change ever lands in `agy-import.yml` without this paragraph being
+updated to match, `gh workflow run` fails with "unexpected inputs
+provided" or `gh run download` with "no artifacts found" — confusing
+either way, since this doc would still show the old names. **Read
+`suqo-antigravity-plugins/.github/workflows/agy-import.yml` directly for
+the current, real input/artifact names** if either command errors in a way
+that suggests they've drifted from what's written here.
 
 **This assumes your existing GitHub credentials can dispatch a workflow and
 download its artifact — unverified.** Every other write this routine does

@@ -1,7 +1,7 @@
 # Subscriptions
 
-Five operations: `list`, `autoPaging`, `create`, `cancel`,
-`updateBillingCycle`. Signatures in `api-surface.md`.
+Eight operations: `list`, `autoPaging`, `create`, `read`, `cancel`, `resume`,
+`renew`, `updateBillingCycle`. Signatures in `api-surface.md`.
 
 ## The checkout flow
 
@@ -179,7 +179,55 @@ No request body is sent and no `Content-Type` header is set. A 404 means the id
 is unknown to **this environment** — a live id against a test key looks exactly
 like a missing one.
 
-There is no `resume()`. Do not offer an "undo cancel" flow through this SDK.
+## Reading one subscription
+
+```php
+$subscription = $suqo->subscriptions->read('3fa85f64-5717-4562-b3fc-2c963f66afa6');
+```
+
+There is still no server-side filter or search parameter on `list()` — `read()`
+is the way to fetch one subscription by id directly instead of scanning
+`autoPaging()` for it. Throws `NotFoundError` on 404, same environment caveat
+as `cancel()`.
+
+## Resuming
+
+```php
+$result = $suqo->subscriptions->resume('3fa85f64-5717-4562-b3fc-2c963f66afa6');
+
+echo $result->message;
+```
+
+Undoes a scheduled cancellation and returns the subscription to active. An
+already-active subscription is returned unchanged, so this is safe to retry by
+hand. A subscription that is already fully cancelled cannot be resumed — that
+is a 400 with a bare list of messages, surfaced as the message on a
+`ValidationError`. No request body is sent, same as `cancel()`.
+
+## Renewing
+
+```php
+use Suqo\Model\CheckoutSession;
+
+$session = $suqo->subscriptions->renew('3fa85f64-5717-4562-b3fc-2c963f66afa6');
+
+echo $session->checkoutUrl, PHP_EOL;   // send this to the buyer
+```
+
+Opens a checkout session for the next payment on one of your own
+subscriptions, reusing its existing customer and billing period rather than
+resubmitting them. Returns a `CheckoutSession` (`publicId`, `expiresAt`,
+`checkoutUrl`) — see `checkout-sessions.md`.
+
+Takes the subscription id as a plain string, like `cancel()` and `resume()`,
+not a params object — the id travels in the body, not the path, and the route
+is the singular `/subscription/renew/`. A cancelled or archived subscription,
+and a paid one-time purchase, cannot be renewed.
+
+Nothing on the `Subscription` record says whether it recurs: match
+`$subscription->product->pbpId` against `products->list()` and read that
+billing period's `intervalType` — `one_time` means the subscription can be
+neither cancelled, resumed nor rescheduled.
 
 ## Moving the billing cycle
 

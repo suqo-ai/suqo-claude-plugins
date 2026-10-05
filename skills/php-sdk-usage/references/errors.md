@@ -28,6 +28,7 @@ use Suqo\Exception\CancelledError;
 use Suqo\Exception\KycRequiredError;
 use Suqo\Exception\NetworkError;
 use Suqo\Exception\NotFoundError;
+use Suqo\Exception\PermissionDeniedError;
 use Suqo\Exception\RateLimitError;
 use Suqo\Exception\ServerError;
 use Suqo\Exception\SuqoError;
@@ -43,6 +44,9 @@ try {
     // Merchant onboarding, not the buyer's problem.
     $this->alertOps('SUQO KYC required: ' . $e->kycStatus);
     return $this->serviceUnavailable();                      // 503
+} catch (PermissionDeniedError $e) {
+    // Valid key, but this account may not use this endpoint.
+    return $this->forbidden();                               // 403
 } catch (AuthenticationError $e) {
     // Our credentials, not the caller's. Never leak this outward.
     $this->alertOps('SUQO auth failed req=' . $e->requestId);
@@ -100,10 +104,12 @@ the message.
 `kycStatus` is the wire field `status_code`, renamed because it sits next to the
 HTTP status and means something else. The raw body still says `status_code`.
 
-A 403 whose body is **not** KYC-shaped (both `status_code` and `message`,
-both strings) yields a bare `SuqoError` with the message
-`Unexpected status 403.` — so if you are catching only `KycRequiredError` and
-seeing nothing, that is why. Catch `SuqoError` too.
+A 403 whose body is **not** KYC-shaped yields `PermissionDeniedError` — a plain
+"not authorized for this endpoint" with the server's `detail` on `rawBody`,
+rather than a bare `SuqoError` with the message discarded. Catch it alongside
+`KycRequiredError` if a task's 403s can come from either path (`customers`
+operations, for instance, raise `PermissionDeniedError` for an account not
+permitted on that endpoint, not `KycRequiredError`).
 
 ## `RateLimitError`
 
@@ -136,9 +142,11 @@ deliberately distinct from the `NetworkError` a timeout produces. Treat it as
 
 ## `NotImplementedError`
 
-Every `$suqo->customers` method. `status` is `0`, nothing was sent. If a task
-needs customer data, say the SDK does not expose it rather than working around
-it — see the customers section of `api-surface.md`.
+Declared for a resource added to the client's shape ahead of its operations.
+**Nothing raises it today** — `Customers`, the resource it was introduced for,
+is fully implemented (`list`, `autoPaging`, `read`, `create`, `update`). Do not
+write a handler expecting it from a documented method; if a future resource is
+added ahead of its operations, this is the type it would use.
 
 ## Retry rules, stated once
 

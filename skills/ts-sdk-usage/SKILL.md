@@ -68,8 +68,11 @@ install and client construction.
 | `suqo.byop.updateProcessingFee(paymentMethodId, { processingFee })` | `ByopFee` |
 | `mapHttpError(input)` | `SuqoError` |
 
-Everything above is the complete surface — `references/api-surface.md` has
-exact signatures and lists what's deliberately *not* exported (internal
+Those are all the calls. The package root also exports `VERSION`, the
+`SubscriptionStatus` constant, the pagination helpers (`toPageQuery`,
+`deserializePage`, `listAll`, `bridgeAutoPaging`), the error classes and the
+model types. `references/api-surface.md` has exact signatures and lists
+what's deliberately *not* exported (internal
 client/auth stubs, the HTTP layer, the `*Resource` classes, every
 `serialize*`/`deserialize*` helper).
 
@@ -181,8 +184,8 @@ const rawBody = await req.text();
    response is sent, silently dropping unawaited work — `await` the
    processing there instead, or use the platform's own keep-alive
    (`after()`, `waitUntil`). See `templates/webhook-nextjs-route.ts`.
-5. Be idempotent — key `checkout.*` on `session_id`,
-   `subscription.status_changed` on `subscription_id` + `changed_at`,
+5. Be idempotent — key `checkout.*` on `session_id` + `event` (a success
+   and a failure share one `session_id`), `subscription.status_changed` on `subscription_id` + `changed_at`,
    `api_key.*` on `api_key_id` + `event`. No event has a field literally
    named `id`. Redelivery is normal; there's no replay store. Grant access
    per checkout line item, by its `subscription_id`.

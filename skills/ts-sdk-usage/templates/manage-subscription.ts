@@ -21,8 +21,9 @@ export async function updateSubscriptionBillingCycle(
 
 /**
  * Undoes a scheduled cancellation (pending_cancellation -> active). An
- * already-active subscription comes back unchanged. A `cancelled` one has
- * nothing to resume — restart it with renewSubscription() below instead.
+ * already-active subscription comes back unchanged. A `cancelled` one can be
+ * neither resumed nor renewed — sell it again with a new checkout session.
+ * renewSubscription() below is for an INACTIVE (lapsed) subscription.
  */
 export async function resumeSubscription(subscriptionId: string): Promise<MessageResponse> {
   return getSuqoClient().subscriptions.resume(subscriptionId);

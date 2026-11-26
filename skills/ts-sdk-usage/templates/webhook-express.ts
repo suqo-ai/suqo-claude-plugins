@@ -60,8 +60,9 @@ router.post("/webhooks/suqo", express.raw({ type: "application/json" }), (req, r
 
 async function processEvent(event: WebhookEvent): Promise<void> {
   // Be idempotent — redelivery is normal and the SDK keeps no replay store of its own.
-  // Key checkout.* on session_id (one delivery per checkout session, the cks_… returned as
-  // publicId when the session was opened), subscription.status_changed on subscription_id +
+  // Key checkout.* on session_id + event — checkout.succeeded and checkout.failed share the
+  // session_id (the cks_… returned as publicId when the session was opened), so session_id alone
+  // could drop a success that follows a failure. subscription.status_changed on subscription_id +
   // changed_at, api_key.* on api_key_id + event. No event has a field literally named `id`.
   switch (event.event) {
     case "checkout.succeeded":

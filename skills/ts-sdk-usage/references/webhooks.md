@@ -234,7 +234,9 @@ to validate payload parsing.
    the platform's own keep-alive (`after()`, `waitUntil`). A long-running
    Node/Express process doesn't have this problem. See
    `templates/webhook-nextjs-route.ts` vs `templates/webhook-express.ts`.
-5. Be idempotent — key `checkout.*` on `session_id`,
+5. Be idempotent — key `checkout.*` on `session_id` + `event` (a
+   `checkout.failed` and a later `checkout.succeeded` can share one
+   `session_id`; keying on the id alone would drop the success),
    `subscription.status_changed` on `subscription_id` + `changed_at`, and
    `api_key.*` on `api_key_id` + `event`; treat a repeat as a no-op.
    Redelivery is normal; the SDK keeps no replay store of its own.

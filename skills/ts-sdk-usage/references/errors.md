@@ -41,8 +41,8 @@ stability guarantee.
 Thrown synchronously from `new SuqoClient(...)` for a bad API key format, or a
 `baseUrl` that disagrees with the key's inferred environment (see
 `client-setup.md`). Also thrown by a method call for an argument that would
-otherwise corrupt the request: an empty, `"."` or `".."` id (every id-taking
-method, 2.0.0+), `"secret"` as a webhook id, a non-positive-integer
+otherwise corrupt the request: an empty, `"."` or `".."` id (every method with
+the id in the path, 2.0.0+), `"secret"` as a webhook id, a non-positive-integer
 bank-account id, a snake_case key in `byop.replaceCredentials()`, or a
 non-string `processingFee`. It means "fix the code," not "handle this request
 differently."

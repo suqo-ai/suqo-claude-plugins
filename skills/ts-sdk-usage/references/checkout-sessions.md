@@ -67,15 +67,16 @@ the SDK never retries it — open a session when the buyer commits to paying,
 not on page load, and back off yourself:
 
 ```ts
-import { RateLimitError } from "@suqo/sdk";
+import { RateLimitError, type CreateCheckoutSessionParams } from "@suqo/sdk";
 
-try {
-  const session = await suqo.checkoutSessions.create(params);
-} catch (err) {
-  if (err instanceof RateLimitError) {
-    // wait err.retryAfter ms (when set), then retry
+async function openSession(params: CreateCheckoutSessionParams) {
+  try {
+    return await suqo.checkoutSessions.create(params);
+  } catch (err) {
+    if (!(err instanceof RateLimitError)) throw err;
+    await new Promise((r) => setTimeout(r, err.retryAfter ?? 5_000));
+    return suqo.checkoutSessions.create(params);   // one retry; a second 429 propagates
   }
-  throw err;
 }
 ```
 

@@ -16,11 +16,11 @@ import {
  * since a real project uses both flows together, not as alternatives — a
  * fix here shouldn't have to be applied twice.
  *
- * `SuqoConfigError` is deliberately NOT special-cased: it's thrown
- * synchronously at `new SuqoClient(...)`, before any request, so it should
- * never actually reach this catch block in practice. Anything unrecognized —
- * that included — is a deploy-time bug, not a request-time error, so it's
- * left to propagate rather than mapped to a response.
+ * `SuqoConfigError` is deliberately NOT special-cased. It comes from
+ * `new SuqoClient(...)` or, since 2.0.0, from a bad argument caught before any
+ * request (e.g. `cancel("")` rejects with it) — either way a bug in the calling
+ * code, not a request-time error, so like anything unrecognized it's left to
+ * propagate rather than mapped to a response.
  */
 export async function handleSubscriptionWrite<T>(
   operation: () => Promise<T>,

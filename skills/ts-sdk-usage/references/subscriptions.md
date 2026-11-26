@@ -108,7 +108,12 @@ Easy to get backwards if you're pattern-matching off `cancel`/`resume`.
 
 `resume(id)` undoes a scheduled cancellation: `pending_cancellation` →
 `active`. An already-active subscription is returned unchanged. A
-**`cancelled`** subscription has nothing to resume — use `renew()`.
+**`cancelled`** subscription can be neither resumed nor renewed (`renew()`
+refuses it: "This subscription was cancelled and cannot be renewed.") —
+sell it again with a new checkout session. The SDK's own `resume()` JSDoc
+says "use `renew()`" here; that contradicts the API and the SDK's own
+`renew()` doc, so don't follow it. `renew()` is for **inactive**
+subscriptions (lapsed without payment), not cancelled ones.
 
 ## One-time purchases
 

@@ -5,8 +5,8 @@ suqo.products.list(params?: PageParams): Promise<Page<Product>>       // GET /ap
 suqo.products.autoPaging(params?: PageParams): AsyncIterableIterator<Product>
 ```
 
-Read-only, no create/update/delete. **The only resource that works
-pre-KYC** — reach for it first when a task doesn't need an authenticated
+Read-only, no create/update/delete. **Works before KYC clears** (so do
+`webhooks.*` and `bankAccounts.*`) — reach for it first when a task doesn't need an authenticated
 buyer yet (e.g. rendering a public pricing page).
 
 `PageParams` is `{ page?: number; pageSize?: number }` — `pageSize` maps to

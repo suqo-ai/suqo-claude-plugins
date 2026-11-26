@@ -53,8 +53,10 @@ timeout and retry settings).
 `replaceCredentials`, `updateProcessingFee`) is **never** retried, whatever
 `maxRetries` says — no idempotency keys exist yet.
 
-Every id-taking method rejects an empty, `"."` or `".."` id with
-`SuqoConfigError` before any request (2.0.0+); the webhook methods also
+Every method that takes an id **in the path** rejects an empty, `"."` or
+`".."` id with `SuqoConfigError` before any request (2.0.0+) —
+`subscriptions.renew()` and `updateBillingCycle()` send theirs in the body
+and don't check it; the webhook methods also
 reject `"secret"`, and the bank-account methods reject anything that isn't a
 positive integer.
 
@@ -65,7 +67,11 @@ list(params?: PageParams): Promise<Page<Product>>       // GET /api/v1/products/
 autoPaging(params?: PageParams): AsyncIterableIterator<Product>
 ```
 
-Read-only. The only resource that works pre-KYC. No create/update/delete.
+Read-only. No create/update/delete. Works before KYC clears — as do
+`webhooks.*` and `bankAccounts.*`; every other resource throws
+`KycRequiredError` until it does (never on the sandbox). The SDK's JSDoc
+calls products "the only resource that works pre-KYC"; Swagger shows the
+other two have no KYC gate either.
 
 ## `suqo.subscriptions`
 

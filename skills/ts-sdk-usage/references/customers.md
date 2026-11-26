@@ -20,9 +20,10 @@ entering their details again. See `checkout-sessions.md`.
 ## A real resource, not a stub
 
 Every method above is implemented and tested. Older copies of the SDK repo's
-`specs/SDK-SPEC.md` and `docs/typescript-addendum.md` described this resource
-as a stub that throws; both were corrected by 2.0.0. If you meet that claim in
-an old fork or cached doc, ignore it.
+`specs/SDK-SPEC.md` described this resource as a stub that throws; that was
+corrected by 2.0.0. `docs/typescript-addendum.md`'s file-layout list still
+labels `customers.ts` "stub methods" as of 2.2.1 — that line is stale, ignore
+it.
 
 ## Creating one
 

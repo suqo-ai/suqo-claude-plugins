@@ -17,8 +17,8 @@ itself is managed through `bankAccounts` — see `bank-accounts.md`.
 SUQO has paid the payout out, then `COMPLETED`; it stays a plain string so a
 status added server-side needs no SDK release.
 
-Every amount is a decimal string, never a float, at up to **three** decimals
-(`"11835.505"`): `netAmount` is `amount` less `providerCharge`,
+Every amount is a decimal string, never a float, with two decimals
+(`"11835.00"`): `netAmount` is `amount` less `providerCharge`,
 `suqoPlatformFee` and `smsCharge`. `paidDate` and `receiptUrl` are `null` until
 the payout is paid.
 

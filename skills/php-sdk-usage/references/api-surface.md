@@ -202,8 +202,8 @@ public function read(
 ): CheckoutSessionDetail                 // GET /api/v1/checkout-sessions/{public_id}/
 ```
 
-`create` is the one rate-limited endpoint on the API — 20 sessions a minute per
-account by default, answered with a `429` and so a `RateLimitError`. It is a
+`create` is rate-limited — 20 sessions a minute per account by default (the
+bank-account `update()`/`sendOtp()` and BYOP writes are rate-limited too), answered with a `429` and so a `RateLimitError`. It is a
 write, so the SDK does not retry it; back off and resend yourself. `read` is
 retried on 0/429/5xx.
 
@@ -487,7 +487,7 @@ new BankAccountParams(
 )
 
 new BankAccountUpdateParams(
-    int $code,                           // required on every call — the OTP from sendOtp()
+    int $code,                           // required on every call — the OTP from sendOtp(); int drops a leading zero, see bank-accounts.md
     ?string $bankName = null,            // optional; only what you set is sent
     ?string $accountName = null,
     ?string $accountNumber = null,

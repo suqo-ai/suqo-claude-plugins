@@ -39,7 +39,7 @@ $account = $suqo->bankAccounts->create(new BankAccountParams(
 
 $suqo->bankAccounts->sendOtp($account->id);
 // …the seller reads the emailed code…
-$verified = $suqo->bankAccounts->update($account->id, new BankAccountUpdateParams(code: 123456));
+$verified = $suqo->bankAccounts->update($account->id, new BankAccountUpdateParams(code: (int) $codeTheSellerTyped));
 ```
 
 `create()`'s four fields are all required: `bankName`, `accountName`,
@@ -53,11 +53,39 @@ has one (one per seller).
 account, and every edit needs a fresh code. `bankName`, `accountName`,
 `accountNumber`, `branch` are optional and only what you set is sent, so
 verifying without changing anything is
-`new BankAccountUpdateParams(code: 123456)`. Throws `ValidationError` on a
+`new BankAccountUpdateParams(code: (int) $codeTheSellerTyped)`. Throws `ValidationError` on a
 wrong or expired code (`fieldErrors['code']`, and nothing is changed),
 invalid fields, or `code: bank_account_has_active_payout` while a payout to
 this account is pending; `RateLimitError` on 429 — code attempts are
 throttled.
+
+**Never hard-code the code as a PHP literal, and never let it lose a leading
+zero.** `BankAccountUpdateParams` types `code` as `int` (SDK 1.2.0), so a code
+the email shows as `012345` reaches the API as `12345` and is refused as wrong.
+Worse, the literal `012345` is **octal** in PHP (`5349`). Pass the code the
+seller typed, and if it starts with `0` tell them the SDK cannot send it yet.
+Ask for a new code with `sendOtp()`. The API itself accepts the code as a
+string; the SDK's `int` is a known bug.
+
+**A wrong code and a refusal land in the same place.** The SDK files every key
+of a 400 body under `fieldErrors`, so both end up in `fieldErrors['code'][0]`:
+
+| 400 body | `fieldErrors` | Meaning |
+| --- | --- | --- |
+| `{"code": "Invalid verification code."}` | `['code' => ['Invalid verification code.']]`, no `detail` | Wrong, expired or missing OTP. Nothing changed; send a new code. |
+| `{"detail": "…", "code": "bank_account_has_active_payout"}` | `['detail' => […], 'code' => ['bank_account_has_active_payout']]` | A refusal: `code` is the reason. |
+
+Tell them apart by `detail`: only a refusal has it.
+
+```php
+} catch (ValidationError $e) {
+    if (isset($e->fieldErrors['detail'])) {
+        $reason = $e->fieldErrors['code'][0] ?? null;    // e.g. bank_account_has_active_payout
+    } elseif (isset($e->fieldErrors['code'])) {
+        $otpProblem = $e->fieldErrors['code'][0];        // "Invalid verification code."
+    }
+}
+```
 
 ## Listing
 

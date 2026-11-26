@@ -61,9 +61,11 @@ Each item's price is **snapshotted when the session opens** — editing the plan
 afterwards cannot change what the buyer already saw. If two items resolve to
 the same product, only the last one survives.
 
-## The one rate-limited endpoint
+## Rate limit
 
-`create` is rate-limited — 20 sessions a minute per account by default. Over
+`create` is rate-limited — 20 sessions a minute per account by default. It is
+not the only rate-limited call: bank-account `update()`/`sendOtp()` and the
+BYOP writes are too. Over
 that, the API answers `429` and the SDK raises `RateLimitError` with
 `retryAfter` set from the response header:
 

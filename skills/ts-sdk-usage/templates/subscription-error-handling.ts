@@ -3,6 +3,7 @@ import {
   KycRequiredError,
   NetworkError,
   NotFoundError,
+  PermissionDeniedError,
   RateLimitError,
   ServerError,
   ValidationError,
@@ -10,16 +11,16 @@ import {
 
 /**
  * The write error ladder shared by every subscriptions write — create, cancel,
- * updateBillingCycle, resume. Used by both templates/create-subscription.ts
+ * updateBillingCycle, resume, renew. Used by both templates/create-subscription.ts
  * and templates/manage-subscription.ts instead of each carrying its own copy,
  * since a real project uses both flows together, not as alternatives — a
  * fix here shouldn't have to be applied twice.
  *
- * `SuqoConfigError` is deliberately NOT special-cased: it's thrown
- * synchronously at `new SuqoClient(...)`, before any request, so it should
- * never actually reach this catch block in practice. Anything unrecognized —
- * that included — is a deploy-time bug, not a request-time error, so it's
- * left to propagate rather than mapped to a response.
+ * `SuqoConfigError` is deliberately NOT special-cased. It comes from
+ * `new SuqoClient(...)` or, since 2.0.0, from a bad argument caught before any
+ * request (e.g. `cancel("")` rejects with it) — either way a bug in the calling
+ * code, not a request-time error, so like anything unrecognized it's left to
+ * propagate rather than mapped to a response.
  */
 export async function handleSubscriptionWrite<T>(
   operation: () => Promise<T>,
@@ -37,15 +38,23 @@ export async function handleSubscriptionWrite<T>(
     if (err instanceof NotFoundError) {
       return { status: 404, body: { message: err.message } };
     }
-    if (err instanceof KycRequiredError || err instanceof AuthenticationError) {
+    if (
+      err instanceof KycRequiredError ||
+      err instanceof PermissionDeniedError ||
+      err instanceof AuthenticationError
+    ) {
       // NOT the caller's fault — this means the merchant's own SUQO account
-      // (KYC status, or the API key itself) needs attention. Never leak
+      // (KYC status, the key's permissions, or the API key itself) needs attention.
+      // A 403 is KycRequiredError only when the body carries status_code; any
+      // other 403 is PermissionDeniedError (@suqo/sdk 2.0.0+). Never leak
       // kycStatus or auth details outward; alert internally instead.
       console.error("SUQO merchant configuration problem:", err);
       return { status: 500, body: { message: "Something went wrong. Please try again later." } };
     }
     if (err instanceof RateLimitError) {
-      // Reserved — the live API doesn't emit 429 today, but handle it anyway.
+      // None of the subscriptions writes is rate-limited today (checkout-session
+      // create, bank-account update/sendOtp and the BYOP writes are), but handle it
+      // anyway. retryAfter is in milliseconds.
       return { status: 429, body: { message: err.message, retryAfter: err.retryAfter } };
     }
     if (err instanceof ServerError) {

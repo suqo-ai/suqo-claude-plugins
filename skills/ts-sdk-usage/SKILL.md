@@ -1,6 +1,6 @@
 ---
 name: ts-sdk-usage
-description: Use for any TypeScript/Node work with the SUQO TS SDK (@suqo/sdk) — listing products, customers, or subscriptions, creating or cancelling subscriptions, resuming or moving a billing cycle, paging, verifying inbound webhooks, wiring the client into Express, Fastify, Next.js, or plain Node, reading SUQO error responses, or testing code that calls the SDK. Provides exact method signatures so the SDK is never guessed at, and the raw-body rule that most broken webhook handlers get wrong.
+description: Use for any TypeScript/Node work with the SUQO TS SDK (@suqo/sdk) — opening checkout sessions to collect payment, listing products, customers, or subscriptions, cancelling, resuming, renewing or rescheduling subscriptions, managing and verifying webhooks, requesting payouts and verifying the payout bank account by OTP, BYOP gateway credentials and fees, paging, wiring the client into Express, Fastify, Next.js, or plain Node, reading SUQO error responses, or testing code that calls the SDK. Provides exact method signatures so the SDK is never guessed at, and the raw-body rule that most broken webhook handlers get wrong.
 ---
 
 # SUQO TypeScript SDK — usage
@@ -10,9 +10,11 @@ be bundled into browser code. Node ≥18, zero runtime dependencies (`fetch`
 and `node:crypto` are both built in), strict TypeScript, dual ESM/CJS build.
 
 **Published.** `@suqo/sdk` is live on the public npm registry:
-`npm i @suqo/sdk`. Releases are automated end-to-end and publish via npm OIDC
-Trusted Publishing (no stored npm tokens), with a required human approval
-before anything goes live. Links: npm
+`npm i @suqo/sdk`. Releases publish via npm OIDC Trusted Publishing (no
+stored npm tokens), with a required human approval before anything goes
+live. **This skill documents `2.2.1`.** 2.0.0 was a breaking major (checkout
+webhook payload, `customers.create()` body); code written against 1.x needs
+the upgrade notes in `references/webhooks.md` and `references/customers.md`. Links: npm
 <https://www.npmjs.com/package/@suqo/sdk>, repo
 <https://github.com/suqo-ai/suqo-sdk-ts>, docs
 <https://suqo.ai/docs/sdk> (TypeScript:
@@ -30,10 +32,8 @@ install and client construction.
    writing from scratch.
 4. **Write against documented methods only.** If a reference doesn't cover
    something, say so — do not invent a method, parameter, or property. In
-   particular: there is no `subscriptions.retrieve(id)` at all;
-   `RateLimitError` exists but the live API has never thrown one;
-   rate-limiting and idempotency are both explicitly "planned," not
-   implemented, in the SDK's own docs.
+   particular: there are no idempotency keys yet (so no write is ever
+   retried), and no way to cancel an in-flight call.
 5. **Verify** — `tsc --noEmit` against the real SDK types, then the
    project's own test/lint command. If a sandbox key is available, exercise
    the code for real; otherwise say plainly that it was only typechecked,
@@ -44,30 +44,52 @@ install and client construction.
 | Call | Returns |
 | --- | --- |
 | `new SuqoClient({ apiKey, baseUrl?, timeout?, maxRetries?, dispatcher? })` | `SuqoClient` |
-| `suqo.products.list(params?)` | `Page<Product>` |
-| `suqo.products.autoPaging(params?)` | `AsyncIterableIterator<Product>` |
-| `suqo.subscriptions.list(params?)` | `SubscriptionPage<Subscription>` |
-| `suqo.subscriptions.autoPaging(params?)` | `AsyncIterableIterator<Subscription>` |
-| `suqo.subscriptions.create(params)` | `CreateSubscriptionResponse` |
-| `suqo.subscriptions.cancel(id)` | `MessageResponse` |
-| `suqo.subscriptions.updateBillingCycle(params)` | `MessageResponse` |
-| `suqo.subscriptions.resume(id)` | `MessageResponse` |
-| `suqo.customers.list(params?)` / `.autoPaging()` / `.retrieve(id: string)` | `Page<Customer>` / iterator / `Customer` |
+| `suqo.checkoutSessions.create(params)` / `.retrieve(id)` | `CheckoutSessionResponse` / `CheckoutSession` |
+| `suqo.products.list(params?)` / `.autoPaging(params?)` | `Page<Product>` / iterator |
+| `suqo.subscriptions.list(params?)` / `.autoPaging(params?)` | `SubscriptionPage<Subscription>` / iterator |
+| `suqo.subscriptions.retrieve(id)` | `Subscription` |
+| `suqo.subscriptions.create(params)` — legacy | `CreateSubscriptionResponse` |
+| `suqo.subscriptions.cancel(id)` / `.resume(id)` / `.updateBillingCycle(params)` | `MessageResponse` |
+| `suqo.subscriptions.renew(subscriptionId)` | `CheckoutSessionResponse` |
+| `suqo.customers.list(params?)` / `.autoPaging()` / `.retrieve(id)` | `Page<Customer>` / iterator / `Customer` |
 | `suqo.customers.create(params)` / `.update(id, params)` | `Customer` |
-| `suqo.webhooks.verify(options)` | `boolean` (never throws) |
+| `suqo.webhooks.list()` / `.retrieve(id)` | `Webhook[]` / `Webhook` |
+| `suqo.webhooks.create(params)` / `.replace(id, params)` / `.update(id, params)` | `Webhook` |
+| `suqo.webhooks.delete(id)` / `.testDelivery(id)` | `void` |
+| `suqo.webhooks.retrieveSecret()` | `WebhookSecret` |
+| `suqo.webhooks.verify(options)` | `boolean` (never throws, no network) |
+| `suqo.payouts.list(params?)` / `.autoPaging()` / `.retrieve(payoutId)` | `Page<Payout>` / iterator / `Payout` |
+| `suqo.payouts.create()` | `Payout` |
+| `suqo.bankAccounts.list()` / `.retrieve(id)` | `BankAccount[]` / `BankAccount` |
+| `suqo.bankAccounts.create(params)` / `.update(id, { code, … })` | `BankAccount` |
+| `suqo.bankAccounts.delete(id)` / `.sendOtp(id)` | `void` |
+| `suqo.byop.listPaymentMethods()` | `PaymentMethod[]` |
+| `suqo.byop.replaceCredentials(paymentMethodId, credentials)` | `void` |
+| `suqo.byop.updateProcessingFee(paymentMethodId, { processingFee })` | `ByopFee` |
 | `mapHttpError(input)` | `SuqoError` |
 
-There is no `subscriptions.retrieve()`. Everything above is the complete
-surface — `references/api-surface.md` lists exactly what's deliberately
-*not* exported too (internal client/auth stubs, the HTTP layer, every
+Those are all the calls. The package root also exports `VERSION`, the
+`SubscriptionStatus` constant, the pagination helpers (`toPageQuery`,
+`deserializePage`, `listAll`, `bridgeAutoPaging`), the error classes and the
+model types. `references/api-surface.md` has exact signatures and lists
+what's deliberately *not* exported (internal
+client/auth stubs, the HTTP layer, the `*Resource` classes, every
 `serialize*`/`deserialize*` helper).
 
 ## Rules that trip people up
 
 Apply these without being asked — most bugs against this SDK are one of them.
 
+- **Collect payment with `checkoutSessions.create()`**, not the legacy
+  `subscriptions.create()`. Neither `checkoutUrl` nor the buyer landing on
+  `returnUrl` is proof of payment — wait for `checkout.succeeded`, matched on
+  `session_id` (= the session's `publicId`).
+- **Checkout webhooks are per session, not per subscription** (2.0.0+): no
+  top-level `subscription_id`; each `line_items[]` entry carries the
+  `subscription_id` it paid for. See `references/webhooks.md`.
 - **Decimal fields are strings.** `price`, `vatPercentage`, `totalSubscribers`,
-  every amount. Never coerce to `number`.
+  every amount (payout amounts included). Never coerce to `number`. The one
+  number is `Offer.discountAmount`, already applied to `price`.
 - **`customer` on the SDK is `client` on the wire** — renamed because
   `client` collides with the SDK's own client object. Only the root key is
   renamed; nested `billing.*` fields get a `billing_` wire prefix on write,
@@ -76,29 +98,37 @@ Apply these without being asked — most bugs against this SDK are one of them.
   mistake in the SDK.
 - **Trailing slash is mandatory** on every route the SDK calls — the SDK
   handles this for you, but don't hand-build a URL to bypass it.
-- **Writes never auto-retry.** `subscriptions.create`, `.cancel`,
-  `.updateBillingCycle`, `.resume`, and `customers.create`/`.update` —
-  none of them retry, ever, regardless of `maxRetries`. No idempotency-key
-  support exists yet. A `NetworkError` from a write means it may or may not
-  have landed; reconcile with `list()`, don't resend blindly.
-- **Two different 400 shapes exist** and `ValidationError` normalizes both —
-  field-keyed (`fieldErrors`) and `detail`-shaped (`message` only). See
-  `references/errors.md`.
-- **`customers` is real here, unlike its stub-only counterpart in other SUQO
-  SDKs' specs.** The SDK repo's own `specs/SDK-SPEC.md`/`typescript-addendum.md`
-  are stale on this point — source, tests, and `docs/user/customers.md` all
-  confirm it's a fully working resource, including `create()`/`update()`.
-  See `references/customers.md`.
-- **`Customer.id` is an opaque prefixed string** (`"cus_..."`), not a plain
-  integer — `@suqo/sdk@1.1.0` corrected a `number` type that never matched
-  the wire. See `references/customers.md`.
+- **Writes never auto-retry** — every `create`/`update`/`replace`/`delete`/
+  `cancel`/`resume`/`renew`/`updateBillingCycle`/`testDelivery`/`sendOtp`/
+  `replaceCredentials`/`updateProcessingFee`, regardless of `maxRetries`. No
+  idempotency-key support exists yet. A `NetworkError` from a write means it
+  may or may not have landed; reconcile by re-reading, don't resend blindly.
+- **Five calls are rate-limited** (`RateLimitError`, `retryAfter` in ms):
+  `checkoutSessions.create()` (20/min per account), `bankAccounts.update()`/
+  `.sendOtp()`, `byop.replaceCredentials()`/`.updateProcessingFee()`.
+- **`ValidationError` normalizes three 400 shapes** — field-keyed
+  (`fieldErrors`), `detail`-shaped and bare-list (`message` only). Payout and
+  bank-account refusals put a reason in `err.rawBody.code` (no typed
+  `err.code`). See `references/errors.md`.
+- **A 403 is two different errors** (2.0.0+): `KycRequiredError` only when
+  the body has `status_code`; otherwise `PermissionDeniedError`.
+- **`customers.create()` requires `email`** (2.0.0+; `phone` is optional).
+- **Ids are opaque strings** (`cus_…`, `cks_…`, `whk_…`, `PYT-…`) — **except
+  `BankAccount.id`, a `number`.**
+- **The bank-account OTP `code` is a string**, exactly as typed — never a
+  number (a leading zero would be lost). A person reads it from email; adding
+  an account doesn't send one — call `sendOtp()`.
+- **BYOP types need 2.2.1.** `PaymentMethod`/`ByopCredentials`/
+  `UpdateByopFeeParams`/`ByopFee` aren't importable on 2.2.0.
 
 ## Webhooks
 
 `suqo.webhooks.verify()` needs no network call and the API key plays no role
 in verification — but it's still a method on an already-constructed
 `SuqoClient` (there's no standalone export for it). **Never throws**; every
-failure mode returns `false`.
+failure mode returns `false`. The `secret` is the `signingSecret` from
+`suqo.webhooks.retrieveSecret()`; registrations themselves are managed with
+`suqo.webhooks.create()`/`list()`/`update()`/… (see `references/webhooks.md`).
 
 ```ts
 const secret = process.env.SUQO_WEBHOOK_SECRET;
@@ -154,9 +184,11 @@ const rawBody = await req.text();
    response is sent, silently dropping unawaited work — `await` the
    processing there instead, or use the platform's own keep-alive
    (`after()`, `waitUntil`). See `templates/webhook-nextjs-route.ts`.
-5. Be idempotent, keyed on `subscription_id` (checkout/status events) or
-   `api_key_id` (`api_key.*` events) — no event has a field literally named
-   `id`. Redelivery is normal; there's no replay store.
+5. Be idempotent — key `checkout.*` on `session_id` + `event` (a success
+   and a failure share one `session_id`), `subscription.status_changed` on `subscription_id` + `changed_at`,
+   `api_key.*` on `api_key_id` + `event`. No event has a field literally
+   named `id`. Redelivery is normal; there's no replay store. Grant access
+   per checkout line item, by its `subscription_id`.
 6. Never echo the body back, and never treat a field inside it as an
    authorization decision on its own — verification confirms it came from
    SUQO, not that its contents are safe to act on blindly.
@@ -171,11 +203,15 @@ purpose), and the dashboard's test-event quirk are in
 | --- | --- |
 | `references/api-surface.md` | Writing any SDK call — exact signatures, exports, and what's deliberately not public. Load first. |
 | `references/client-setup.md` | Constructing the client, installing from npm, environment inference, framework wiring. |
-| `references/products.md` | Listing products/plans, the pbpId chain into subscriptions. |
-| `references/subscriptions.md` | Create, cancel, billing-cycle, resume flows; the customer/client wire rename and its billing-prefix asymmetry. |
-| `references/customers.md` | The real (not stub) customers resource; the `1.0.0`→`1.1.0` id-type fix. |
-| `references/webhooks.md` | Verification semantics, signed-payload format, event catalogue. |
-| `references/errors.md` | Error hierarchy, retry rules, mapping to HTTP responses. |
+| `references/checkout-sessions.md` | Collecting payment: catalogue vs partner-priced items, `customerId`, rate limit, reading a session back. |
+| `references/products.md` | Listing products/plans/offers, the pbpId chain into checkout. |
+| `references/subscriptions.md` | Retrieve, legacy create, cancel, resume, renew, billing-cycle; one-time purchases; the customer/client wire rename. |
+| `references/customers.md` | The customers resource; `email` required since 2.0.0; the `1.1.0` id-type fix. |
+| `references/webhooks.md` | Verification, signed-payload format, event payloads (the 2.0.0 checkout reshape), managing registrations and the signing secret. |
+| `references/payouts.md` | Requesting and tracking payouts; refusal codes. |
+| `references/bank-accounts.md` | Adding the payout bank account and verifying it by emailed OTP. |
+| `references/byop.md` | Bring-your-own-payment: payment methods, gateway credentials, processing fee. |
+| `references/errors.md` | Error hierarchy (incl. `PermissionDeniedError`), the three 400 shapes, rate limits, retry rules, mapping to HTTP responses. |
 | `references/models.md` | Property tables for every model, and the short list of wire↔SDK renames. |
 | `references/pagination.md` | Manual `page`/`pageSize` vs `.autoPaging()`, and why an in-flight call can't be cancelled today. |
 
@@ -187,9 +223,11 @@ purpose), and the dashboard's test-event quirk are in
 | `templates/list-products.ts` | `autoPaging` read down to a billing period's `pbpId`. |
 | `templates/list-products-paged.ts` | Manual `page`/`pageSize` for a Next/Previous UI control. |
 | `templates/list-customers.ts` | `list`/`retrieve` on the real (not stub) customers resource. |
+| `templates/create-checkout-session.ts` | `checkoutSessions.create()` with both item kinds, plus its error handling. |
+| `templates/request-payout.ts` | Bank account add → `sendOtp` → verify, then `payouts.create()` with refusal codes. |
 | `templates/subscription-error-handling.ts` | The shared write error ladder used by both templates below. |
-| `templates/create-subscription.ts` | Full nested `create()`. |
-| `templates/manage-subscription.ts` | `cancel`/`updateBillingCycle`/`resume`. |
+| `templates/create-subscription.ts` | Full nested (legacy) `subscriptions.create()`. |
+| `templates/manage-subscription.ts` | `cancel`/`updateBillingCycle`/`resume`/`renew`. |
 | `templates/webhook-plain-node.ts` | No-framework webhook endpoint. |
 | `templates/webhook-express.ts` | Express route with `express.raw()` scoped correctly. |
 | `templates/webhook-fastify.ts` | Fastify route with a plugin-scoped raw-body parser. |

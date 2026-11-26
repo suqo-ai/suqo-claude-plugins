@@ -59,14 +59,22 @@ router.post("/webhooks/suqo", express.raw({ type: "application/json" }), (req, r
 });
 
 async function processEvent(event: WebhookEvent): Promise<void> {
-  // Be idempotent — key on subscription_id (or api_key_id for api_key.* events);
-  // redelivery is normal, the SDK keeps no replay store of its own.
+  // Be idempotent — redelivery is normal and the SDK keeps no replay store of its own.
+  // Key checkout.* on session_id (one delivery per checkout session, the cks_… returned as
+  // publicId when the session was opened), subscription.status_changed on subscription_id +
+  // changed_at, api_key.* on api_key_id + event. No event has a field literally named `id`.
   switch (event.event) {
     case "checkout.succeeded":
-      console.log("checkout succeeded", event.subscription_id, event.amount);
+      // Grant access per line item: each carries the subscription it pays for. There is no
+      // top-level subscription_id on a checkout event (changed in @suqo/sdk 2.0.0).
+      for (const item of event.line_items) {
+        console.log("paid", event.session_id, item.subscription_id ?? "(no subscription_id)", item.name, item.amount);
+      }
       break;
     case "checkout.failed":
-      console.log("checkout failed", event.subscription_id);
+      // Final, after SUQO's own retries. Its line items' subscription_id is a placeholder that
+      // never activates — don't grant anything on it.
+      console.log("checkout failed", event.session_id, event.amount);
       break;
     case "subscription.status_changed":
       console.log(event.subscription_id, event.previous_status, "->", event.current_status);

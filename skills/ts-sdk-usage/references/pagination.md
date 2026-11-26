@@ -1,8 +1,11 @@
 # Pagination
 
-Every list endpoint (`products.list()`, `subscriptions.list()`,
-`customers.list()`) returns the same envelope shape and offers two ways to
-walk it — manual `page`/`pageSize`, or `.autoPaging()`.
+Every paginated list endpoint (`products.list()`, `subscriptions.list()`,
+`customers.list()`, `payouts.list()`) returns the same envelope shape and
+offers two ways to walk it — manual `page`/`pageSize`, or `.autoPaging()`.
+
+**Not paginated** — these return a plain array, with no `autoPaging()`:
+`webhooks.list()`, `bankAccounts.list()` and `byop.listPaymentMethods()`.
 
 ## The envelope
 

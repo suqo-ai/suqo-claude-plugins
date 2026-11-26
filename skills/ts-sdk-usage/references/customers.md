@@ -13,40 +13,41 @@ subscribes, via [`subscriptions.create()`](subscriptions.md)'s `customer`
 field — `create()` is for recording one without opening a subscription.
 There's no `delete`.
 
-## Read this before trusting any other doc about this resource
+A customer recorded here can be passed to `checkoutSessions.create()` as
+`customerId` (2.0.0+): the buyer then goes straight to payment without
+entering their details again. See `checkout-sessions.md`.
 
-**`specs/SDK-SPEC.md` §11 and `docs/typescript-addendum.md` §6 in the SDK
-repo both still describe this resource as an unimplemented stub** — the spec
-says every method "throws `SuqoError(\"customers API not yet available in
-this SDK version\")`". **That is stale.** The real
-`src/resources/customers.ts` implements every method above for real, hitting
-the endpoints listed; `test/contract/requestShape.test.ts` exercises
-`list`/`retrieve` against a mock server and `test/resources/customers.test.ts`
-covers `autoPaging` separately; `docs/user/customers.md` and
-`examples/list-customers.ts` both describe and use it as fully working. Treat source + tests + `docs/user/` as
-ground truth for this resource — the spec and addendum simply haven't caught
-up to the implementation yet.
+## A real resource, not a stub
+
+Every method above is implemented and tested. Older copies of the SDK repo's
+`specs/SDK-SPEC.md` and `docs/typescript-addendum.md` described this resource
+as a stub that throws; both were corrected by 2.0.0. If you meet that claim in
+an old fork or cached doc, ignore it.
 
 ## Creating one
 
 ```ts
 const customer = await suqo.customers.create({
-  phone: "9800000000", // required
+  email: "ram@example.com", // required
+  phone: "9800000000",      // optional
   fullName: "Ram Bahadur",
-  email: "ram@example.com",
   address: "Kathmandu",
 });
 ```
 
-- `phone` identifies the buyer and can't be changed later. It must be a
-  Nepali mobile number (10 digits starting with 96, 97 or 98); a `+977`
-  country code, a leading `0`, spaces and dashes are accepted and stripped.
-- If you already have a customer with that phone, `create()` updates that
-  customer instead of making a second one, and returns it — that makes
+- **Changed in 2.0.0 (breaking):** `email` identifies the buyer and is
+  **required**; `phone` is optional. In 1.x it was the other way round —
+  code written against 1.x that omits `email` no longer compiles.
+- `phone`, if sent, can't be changed later. It must be a Nepali mobile number
+  (10 digits starting with 96, 97 or 98); a `+977` country code, a leading
+  `0`, spaces and dashes are accepted and stripped.
+- If you already have a customer with that email or phone, `create()` updates
+  that customer instead of making a second one (the API answers `200`
+  rather than `201`; both resolve to the `Customer`), and returns it — that makes
   `create()` safe for you to retry yourself, though the SDK never retries a
   write automatically.
-- The name, email and address are your account's own copy of the buyer's
-  details and aren't shared with other sellers.
+- The name and address are your account's own copy of the buyer's details
+  and aren't shared with other sellers.
 - **Write vs. read names:** you send `phone`/`email`, and they come back on
   the `Customer` as `buyerPhone`/`buyerEmail`.
 
@@ -86,10 +87,11 @@ with `string`, and add `address` (or `null`) to any `Customer` object you
 construct by hand (e.g. test fixtures) — it's now a required property.
 
 Every field except `id`/`createdAt` can be `null` — a customer record
-doesn't guarantee it has a phone, email, or address on file. `retrieve("")`
-and `update("", ...)` (and `"."`/`".."`, which URL parsing resolves the same
+doesn't guarantee it has a phone, email, or address on file (records created
+before 2.0.0's email requirement may lack an email). `retrieve("")` and
+`update("", ...)` (and `"."`/`".."`, which URL parsing resolves the same
 way) both throw `SuqoConfigError` rather than silently colliding with
-`list()`'s own URL — confirmed the same guard runs before either call.
+`list()`'s own URL.
 
 [#42]: https://github.com/suqo-ai/suqo-sdk-ts/issues/42
 
@@ -97,9 +99,9 @@ way) both throw `SuqoConfigError` rather than silently colliding with
 
 ```ts
 interface CreateCustomerParams {
-  phone: string;
+  email: string;      // required since 2.0.0
+  phone?: string;     // optional since 2.0.0
   fullName?: string;
-  email?: string;
   address?: string;
 }
 interface UpdateCustomerParams {
@@ -113,7 +115,7 @@ interface UpdateCustomerParams {
 
 This `Customer` record (this resource's own shape, above) is a genuinely
 different type from `SubscriptionCustomer` — the object embedded under
-`subscription.customer` when you call `subscriptions.list`/`create` (see
+`subscription.customer` when you call `subscriptions.list`/`retrieve` (see
 `subscriptions.md`, `models.md`). The SDK never conflates them, and neither
 should generated code: don't assume a `Customer.id` shows up anywhere on a
 `Subscription`, and don't assume `SubscriptionCustomer`'s fields (`phone`,

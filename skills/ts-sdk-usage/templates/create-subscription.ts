@@ -3,14 +3,19 @@ import { getSuqoClient } from "./suqo-client.js";
 import { handleSubscriptionWrite } from "./subscription-error-handling.js";
 
 /**
+ * LEGACY since @suqo/sdk 2.0.0 — prefer templates/create-checkout-session.ts
+ * (checkoutSessions.create()), which takes up to ten items in one payment and
+ * doesn't need a full customer object. This still works and isn't deprecated.
+ *
  * Creates a subscription for a buyer and returns the checkout URL to redirect
  * them to. `checkoutUrl` is NOT proof of payment — the real outcome (paid or
  * failed) arrives later via the checkout.succeeded/checkout.failed webhooks;
  * see templates/webhook-express.ts.
  *
- * If this same buyer already has an inactive/expired subscription for this
- * product+billing-period, SUQO reactivates it instead of creating a new one.
- * A currently-active one throws ValidationError for a duplicate subscription.
+ * `customer.email` identifies the buyer. A buyer may hold only one live
+ * recurring subscription per product: a second one on any billing period of
+ * the same product throws ValidationError. To restart an inactive one, use
+ * subscriptions.renew() (templates/manage-subscription.ts), not a new create().
  *
  * `customer` takes the SDK's full CustomerInput shape directly (rather than a
  * narrower local type) so billing/shipping overrides stay reachable — see

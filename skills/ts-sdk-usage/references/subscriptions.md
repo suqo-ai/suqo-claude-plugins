@@ -1,20 +1,25 @@
 # Subscriptions
 
 ```ts
-suqo.subscriptions.list(params?: PageParams): Promise<SubscriptionPage<Subscription>>   // GET /api/v1/subscriptions/
+suqo.subscriptions.list(params?: PageParams): Promise<SubscriptionPage<Subscription>>   // GET  /api/v1/subscriptions/
 suqo.subscriptions.autoPaging(params?: PageParams): AsyncIterableIterator<Subscription>
-suqo.subscriptions.create(params: CreateSubscriptionParams): Promise<CreateSubscriptionResponse>  // POST /api/v1/subscriptions/
+suqo.subscriptions.retrieve(id: string): Promise<Subscription>                           // GET  /api/v1/subscriptions/{id}/          — 2.0.0+
+suqo.subscriptions.create(params: CreateSubscriptionParams): Promise<CreateSubscriptionResponse>  // POST /api/v1/subscriptions/  — LEGACY
 suqo.subscriptions.cancel(id: string): Promise<MessageResponse>                          // POST /api/v1/subscriptions/{id}/cancel/
 suqo.subscriptions.updateBillingCycle(params: UpdateBillingCycleParams): Promise<MessageResponse>  // POST /api/v1/subscriptions/update-billing-cycle/
 suqo.subscriptions.resume(id: string): Promise<MessageResponse>                          // POST /api/v1/subscriptions/{id}/resume/
+suqo.subscriptions.renew(subscriptionId: string): Promise<CheckoutSessionResponse>       // POST /api/v1/subscription/renew/ (singular) — 2.0.0+
 ```
 
-**No `retrieve(id)` exists on this resource.** Not a gap in the skill — a gap
-in the SDK, per its own source comment ("still blocked on a real sample
-response from backend"). If a task seems to need it, say so rather than
-inventing a call.
+`retrieve(id)` exists since 2.0.0. It's built from Swagger's schema; the SDK
+notes it isn't yet checked against a captured response.
 
-## Create
+## Create — legacy since 2.0.0
+
+**Prefer `checkoutSessions.create()`** (see `checkout-sessions.md`): one
+checkout for up to ten items, and no full customer object needed.
+`subscriptions.create()` still works and isn't deprecated — existing
+integrations keep working — but new code should use checkout sessions.
 
 ```ts
 interface CreateSubscriptionParams { pbpId: string; returnUrl: string; customer: CustomerInput; }
@@ -27,15 +32,15 @@ interface CreateSubscriptionResponse {
 
 `create()` returns a `checkoutUrl` to redirect the buyer to.
 **`checkoutUrl` is not proof of payment.** The subscription starts
-`pending_checkout`; the real outcome — success or failure — arrives later via
-the `checkout.succeeded`/`checkout.failed` webhooks (see `webhooks.md`). Don't
-mark anything as paid off the presence of a `checkoutUrl` alone.
+`pending_checkout`; the real outcome arrives later via the
+`checkout.succeeded`/`checkout.failed` webhooks (see `webhooks.md`) — the same
+session-keyed payload checkout sessions use.
 
-**Reuse, not duplication, for a repeat buyer.** If the same buyer already has
-an inactive or expired subscription for the same product + billing period,
-`create()` reactivates it instead of making a new one. Only a subscription
-that's currently **active** for that same combination throws a
-`ValidationError` for a duplicate-active-subscription.
+**One live recurring subscription per product.** `customer.email` identifies
+the buyer. A buyer may hold only one live recurring subscription per product:
+a second one on **any** billing period of the same product throws
+`ValidationError` (a bare-list 400, surfaced as `err.message`). To restart an
+inactive subscription, use `renew()` — not a new `create()`.
 
 ### `customer` — the field that's renamed on the wire, with an extra asymmetry
 
@@ -63,14 +68,30 @@ wrinkle that's easy to get backwards:
 This is a real backend quirk, not a bug to "fix" in generated code — write
 code that matches it exactly rather than assuming symmetry. If `billing` is
 omitted entirely on create, billing info is filled in server-side from the
-buyer's existing profile; on a reuse/reactivation, only the fields you send
-overwrite what's already on file.
+buyer's own profile.
+
+## Renew (2.0.0+)
+
+```ts
+const session = await suqo.subscriptions.renew("sub_…");   // CheckoutSessionResponse
+session.checkoutUrl;   // send the buyer here
+session.publicId;      // "cks_…" — the session_id on the checkout.* webhook
+```
+
+Opens a checkout session for the subscription's next payment, reusing its
+customer and billing period (or partner-priced item) rather than resubmitting
+them — **how an inactive subscription is restarted.** The id travels in the
+request body (`subscription_id`) on the singular `/subscription/renew/` path.
+A cancelled or archived subscription, or a paid one-time purchase, can't be
+renewed: `ValidationError`.
 
 ## Cancel
 
 `cancel(id)` **schedules** cancellation for the end of the current billing
 period — it is not immediate. Status moves to `pending_cancellation`, not
-straight to `cancelled`.
+straight to `cancelled`; the subscription stays active until the period ends.
+Calling it on a subscription already cancelled or pending cancellation
+returns it unchanged, so retrying by hand is safe.
 
 ## Update billing cycle
 
@@ -79,70 +100,78 @@ interface UpdateBillingCycleParams { subscriptionId: string; nextBillingCycle: s
 ```
 
 This is a **collection-level** call: `subscriptionId` travels in the request
-body, not the URL path — unlike `cancel`/`resume`, which are path-templated
-(`/subscriptions/{id}/cancel/`, `/subscriptions/{id}/resume/`). Easy to get
-backwards if you're pattern-matching off `cancel`/`resume`. `nextBillingCycle`
-must be today-or-future.
+body, not the URL path — unlike `cancel`/`resume`, which are path-templated.
+Easy to get backwards if you're pattern-matching off `cancel`/`resume`.
+`nextBillingCycle` must be today or later.
 
 ## Resume
 
-`resume(id)` un-schedules a pending cancellation / reactivates. Confirmed
-public and working, but its response shape is sourced from a Swagger example
-only — the SDK's own comment flags it as "likely-correct-but-unverified,"
-one notch less confidence than `cancel`/`updateBillingCycle`. Don't build
-brittle logic on an exact field of its response without allowing for that.
+`resume(id)` undoes a scheduled cancellation: `pending_cancellation` →
+`active`. An already-active subscription is returned unchanged. A
+**`cancelled`** subscription has nothing to resume — use `renew()`.
+
+## One-time purchases
+
+A billing period whose `intervalType` is `"one_time"` creates a subscription
+that appears in `list()` but **can't be cancelled, resumed, rescheduled or
+renewed** — each throws `ValidationError` (e.g. "This is a one-time purchase,
+so there is nothing to cancel."). One-time subscriptions are also left out of
+`list()`'s status counts. Nothing on `Subscription` itself says whether it
+recurs: match `subscription.product?.pbpId` against `products.list()` and read
+that billing period's `intervalType`.
 
 ## Status
 
 ```ts
-SubscriptionStatus.PendingCheckout   // "pending_checkout"
-SubscriptionStatus.Active            // "active"
-SubscriptionStatus.Due               // "due"
-SubscriptionStatus.Cancelled         // "cancelled"
+SubscriptionStatus.PendingCheckout     // "pending_checkout"
+SubscriptionStatus.Active              // "active"
+SubscriptionStatus.Due                 // "due"
+SubscriptionStatus.Cancelled           // "cancelled"
 SubscriptionStatus.PendingCancellation // "pending_cancellation"
-SubscriptionStatus.Inactive          // "inactive"
+SubscriptionStatus.Inactive            // "inactive"
 ```
 
-`subscription.isActive` is `true` iff `status === "active"` — it's a
-convenience flag, not independent state. The type stays open
-(`| (string & {})`, see `api-surface.md`) so an unrecognized future status
-still type-checks; narrow with `===` against a known constant, not an
-exhaustive `switch`.
+`subscription.isActive` is `true` iff `status === "active"` — a convenience
+flag, not independent state. The type stays open (`| (string & {})`, see
+`api-surface.md`) so an unrecognized future status still type-checks; narrow
+with `===` against a known constant and keep a fallback branch.
 
 ## Retries
 
-None of `create`/`cancel`/`updateBillingCycle`/`resume` retry automatically —
-no idempotency-key support exists yet (see `errors.md` and the SDK's own
-`docs/user/idempotency.md`, explicitly marked "planned"). A `NetworkError`
-from any of these means the write may or may not have landed; reconcile by
-re-`list`ing rather than blindly resending.
+None of `create`/`cancel`/`updateBillingCycle`/`resume`/`renew` retry
+automatically — no idempotency-key support exists yet (see `errors.md`). A
+`NetworkError` from any of these means the write may or may not have landed;
+reconcile by re-reading rather than blindly resending.
 
-`list`/`autoPaging` do retry (`NetworkError`/429/5xx, with backoff).
+`list`/`autoPaging`/`retrieve` do retry (`NetworkError`/429/5xx, with
+backoff).
 
 ## Shape
 
 ```ts
-interface SubscriptionProduct {
-  productId: string; name: string; planName: string; pbpId: string; label: string;
-  price: string; currency: string;
+interface SubscriptionProduct {        // every field string | null since 2.0.0
+  productId: string | null; name: string | null; planName: string | null;
+  pbpId: string | null; label: string | null; price: string | null; currency: string | null;
 }
 interface Subscription {
   subscriptionId: string; status: SubscriptionStatus; isActive: boolean;
-  customer: SubscriptionCustomer;   // read shape — see models.md
-  product: SubscriptionProduct;
+  customer: SubscriptionCustomer;      // read shape — see models.md
+  product: SubscriptionProduct | null;
   currentPeriodStart: string | null; currentPeriodEnd: string | null;
   nextBillingCycle: string | null; createdAt: string;
 }
 ```
 
-`currentPeriodEnd` and `nextBillingCycle` are documented as always equal —
-don't treat a difference between them as meaningful. `product.price` stays a
-string, same decimal rule as `products.md`.
+**Null-check `product` and every field on it** — the API may omit or null
+any of them, and since 2.0.0 the types say so. `currentPeriodEnd` and
+`nextBillingCycle` are documented as always equal — don't treat a difference
+between them as meaningful. `product.price` stays a string, same decimal rule
+as `products.md`.
 
 `SubscriptionPage<T>` extends the common `Page<T>` with
 `totalSubscriptions`/`activeSubscriptions`/`dueSubscriptions`/
 `inactiveSubscriptions` counts — see `models.md`.
 
-See `templates/create-subscription.ts` for a full `create()` call with the
-error ladder, and `templates/manage-subscription.ts` for
-`cancel`/`updateBillingCycle`/`resume`.
+See `templates/create-subscription.ts` for a full (legacy) `create()` call
+with the error ladder, and `templates/manage-subscription.ts` for
+`cancel`/`updateBillingCycle`/`resume`/`renew`.
